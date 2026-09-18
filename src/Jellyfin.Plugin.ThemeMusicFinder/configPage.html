@@ -1,0 +1,90 @@
+<div id="ThemeMusicFinderConfigPage" data-role="page" class="page type-interior pluginConfigurationPage">
+  <div data-role="content"><div class="content-primary">
+    <p class="fieldDescription" style="margin-bottom:1.5em">
+        Saves themes as <code>theme.mp3</code> in each series folder, so Jellyfin needs
+        <strong>write access</strong> to your TV library. The plugin searches the public
+        Plex TV Themes catalog using each series&rsquo; TVDB identifier. If Plex has no
+        match, the optional ThemerrDB fallback uses the series&rsquo; TMDB identifier and
+        converts its curated YouTube theme to MP3 with Jellyfin&rsquo;s FFmpeg.
+        An existing <code>theme.mp3</code> is never overwritten.
+    </p>
+    <form id="ThemeMusicFinderConfigForm">
+      <div class="inputContainer">
+        <label class="inputLabel" for="RetryAfterDays">Retry a missing theme after (days)</label>
+        <input id="RetryAfterDays" name="RetryAfterDays" type="number" min="1" step="1" required is="emby-input" />
+        <div class="fieldDescription">Shows with no theme available are retried on this interval.</div>
+      </div>
+      <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableItemAddedHook" />
+        <span>Fetch a theme as soon as a series is added</span>
+      </label>
+      <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableThemerrFallback" />
+        <span>Use ThemerrDB as a fallback when Plex has no theme</span>
+      </label>
+      <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
+    </form>
+
+    <div is="emby-collapse" title="How it works">
+      <div class="collapseContent">
+        <p class="fieldDescription">
+          Runs nightly at 3:00 AM as the <strong>Find missing theme music</strong> scheduled task,
+          and optionally the moment a series is added. Run it any time from
+          Dashboard &rarr; Scheduled Tasks.
+        </p>
+        <p class="fieldDescription">For each series:</p>
+        <ol class="fieldDescription">
+          <li>Skip if a <code>theme.mp3</code> is already there.</li>
+          <li>Read its TVDB and TMDB IDs from Jellyfin metadata.</li>
+          <li>Skip if it failed recently (see the retry interval).</li>
+          <li>Try Plex by TVDB ID. Only a confirmed miss falls through to ThemerrDB by TMDB ID.</li>
+          <li>Download, throttled to about one series per second.</li>
+          <li>Validate it is a real MP3 &mdash; a missing theme returns an error page, not a 404.</li>
+          <li>Write to a temp file, then rename it into place.</li>
+          <li>Refresh the item, or Jellyfin never notices the file.</li>
+        </ol>
+        <p class="fieldDescription">
+          A theme that genuinely does not exist is retried on your interval below. Temporary
+          failures &mdash; timeouts, server errors &mdash; are not recorded, so a bad hour
+          upstream does not stall your whole library.
+        </p>
+        <p class="fieldDescription">
+          Files land at <code>&lt;series folder&gt;/theme.mp3</code>. Playback is a
+          <em>client</em> setting: Settings &rarr; Playback &rarr; &ldquo;Play theme songs&rdquo;.
+        </p>
+      </div>
+    </div>
+  </div></div>
+  <script type="text/javascript">
+    var ThemeMusicFinderPluginId = "03459bac-6165-4b2d-b05f-40b953159b59";
+    document.querySelector('#ThemeMusicFinderConfigPage').addEventListener('pageshow', function () {
+      Dashboard.showLoadingMsg();
+      ApiClient.getPluginConfiguration(ThemeMusicFinderPluginId).then(function (config) {
+        document.querySelector('#RetryAfterDays').value = config.RetryAfterDays;
+        document.querySelector('#EnableItemAddedHook').checked = config.EnableItemAddedHook;
+        document.querySelector('#EnableThemerrFallback').checked = config.EnableThemerrFallback !== false;
+        Dashboard.hideLoadingMsg();
+      }).catch(function (err) {
+        Dashboard.hideLoadingMsg();
+        Dashboard.alert('Failed to load Theme Music Finder configuration.');
+      });
+    });
+    document.querySelector('#ThemeMusicFinderConfigForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      Dashboard.showLoadingMsg();
+      ApiClient.getPluginConfiguration(ThemeMusicFinderPluginId).then(function (config) {
+        // parseInt('') is NaN, which JSON.stringify emits as null and the server deserializes
+        // into an int as 0 - which would disable backoff entirely. The server clamps too.
+        var retryAfterDays = parseInt(document.querySelector('#RetryAfterDays').value, 10);
+        config.RetryAfterDays = isNaN(retryAfterDays) || retryAfterDays < 1 ? 1 : retryAfterDays;
+        config.EnableItemAddedHook = document.querySelector('#EnableItemAddedHook').checked;
+        config.EnableThemerrFallback = document.querySelector('#EnableThemerrFallback').checked;
+        return ApiClient.updatePluginConfiguration(ThemeMusicFinderPluginId, config);
+      }).then(Dashboard.processPluginConfigurationUpdateResult).catch(function (err) {
+        Dashboard.hideLoadingMsg();
+        Dashboard.alert('Failed to save Theme Music Finder configuration.');
+      });
+      return false;
+    });
+  </script>
+</div>
