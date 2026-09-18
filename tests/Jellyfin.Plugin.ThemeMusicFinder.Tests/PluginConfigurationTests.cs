@@ -33,4 +33,23 @@ public class PluginConfigurationTests
     [Fact]
     public void ThemerrFallbackIsOnByDefault()
         => Assert.True(new PluginConfiguration().EnableThemerrFallback);
+
+    [Fact]
+    public void AnimeThemesAndNormalizationAreOnByDefault()
+    {
+        var config = new PluginConfiguration();
+        Assert.True(config.EnableAnimeThemes);
+        Assert.True(config.EnableLoudnessNormalization);
+        Assert.Equal(-18.0, config.NormalizationTargetLufs);
+    }
+
+    [Theory]
+    [InlineData(-30, -24)]
+    [InlineData(-18, -18)]
+    [InlineData(-8, -12)]
+    public void LoudnessTargetIsClamped(double assigned, double expected)
+    {
+        var config = new PluginConfiguration { NormalizationTargetLufs = assigned };
+        Assert.Equal(expected, config.NormalizationTargetLufs);
+    }
 }

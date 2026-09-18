@@ -80,6 +80,20 @@ internal sealed class FakeThemeAudioDownloader(Func<Uri, byte[]> respond) : IThe
     }
 }
 
+internal sealed class FakeThemeAudioProcessor(Func<byte[], string, byte[]> respond) : IThemeAudioProcessor
+{
+    public List<(byte[] Body, string Extension)> Requested { get; } = [];
+
+    public Task<byte[]> ConvertToNormalizedMp3Async(
+        byte[] source,
+        string sourceExtension,
+        CancellationToken ct)
+    {
+        Requested.Add((source, sourceExtension));
+        return Task.FromResult(respond(source, sourceExtension));
+    }
+}
+
 /// <summary>Stands in for <see cref="Task.Delay(TimeSpan, CancellationToken)"/> so the throttle
 /// can be asserted rather than slept through.</summary>
 internal sealed class DelayRecorder
