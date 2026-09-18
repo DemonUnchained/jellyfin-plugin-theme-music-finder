@@ -1,17 +1,18 @@
 ---
 name: "Theme Music Finder"
 guid: "03459bac-6165-4b2d-b05f-40b953159b59"
-version: "1.1.0.0"
+version: "1.2.0.0"
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 overview: "Finds missing TV series theme music and saves it as theme.mp3."
 description: >
-  Scans physical TV series, checks Plex by TVDB ID, falls back to ThemerrDB by
-  TMDB ID, validates each MP3, writes atomically, and refreshes Jellyfin.
+  Scans physical TV series, checks ThemerrDB by TMDB ID, strictly matched
+  AnimeThemes openings, then Plex by TVDB ID. New downloads are normalized,
+  validated, written atomically, and followed by a Jellyfin item refresh.
   Existing theme.mp3 files are never overwritten.
 category: "Metadata"
 owner: "DemonUnchained"
 artifacts:
   - "Jellyfin.Plugin.ThemeMusicFinder.dll"
   - "YoutubeExplode.dll"
-changelog: "Updated for Jellyfin 12.1 and added a curated ThemerrDB fallback after Plex misses."
+changelog: "Uses ThemerrDB first, adds strict AnimeThemes fallback, rejects a known bad Plex mapping, logs sources, and normalizes new themes to -18 LUFS."
