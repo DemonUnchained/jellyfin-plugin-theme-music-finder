@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.1.0
+
+- Allows a dead, restricted, streamless, timed-out, or unconvertible ThemerrDB
+  YouTube candidate to fall through to AnimeThemes and Plex while genuine
+  provider/API outages still stop the chain.
+- Replaced YoutubeExplode's implicit 100-second request timeout with an explicit
+  60-second total remote-candidate limit and selects the smallest suitable audio
+  representation.
+- Added safe support for extracting audio from a small muxed stream when YouTube
+  exposes no audio-only representation.
+- Starts a fresh negative-cache generation so misses recorded before AnimeThemes
+  was introduced are checked against it immediately after upgrading.
+- Added a final sweep summary covering downloads, confirmed misses, transient
+  failures, write failures, unexpected errors, skips, and total series scanned.
+
 ## 1.2.0.0
 
 - Changed provider priority to ThemerrDB first, strict AnimeThemes second, and
