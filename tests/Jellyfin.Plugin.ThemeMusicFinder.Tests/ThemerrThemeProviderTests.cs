@@ -101,7 +101,7 @@ public sealed class ThemerrThemeProviderTests
     }
 
     [Fact]
-    public async Task DownloaderFailureIsTransient()
+    public async Task DownloaderFailureMarksOnlyTheCandidateUnavailable()
     {
         var provider = new ThemerrThemeProvider(
             new HttpClient(new StubHandler(
@@ -111,7 +111,8 @@ public sealed class ThemerrThemeProviderTests
 
         var result = await provider.FetchAsync(Series("1399"), CancellationToken.None);
 
-        Assert.Equal(ThemeFetchStatus.Transient, result.Status);
+        Assert.Equal(ThemeFetchStatus.CandidateUnavailable, result.Status);
+        Assert.Contains("disk full", result.Reason);
     }
 
     [Fact]

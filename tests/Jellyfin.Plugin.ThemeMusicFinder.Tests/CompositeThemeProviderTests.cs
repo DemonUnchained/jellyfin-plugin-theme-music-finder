@@ -53,6 +53,34 @@ public sealed class CompositeThemeProviderTests
     }
 
     [Fact]
+    public async Task UnusableCandidateFallsThroughToNextCuratedProvider()
+    {
+        var primary = new Provider(ThemeFetchResult.CandidateUnavailable("deleted video"));
+        var fallback = new Provider(ThemeFetchResult.Found([1, 2, 3]));
+        var chain = new CompositeThemeProvider(primary, fallback);
+
+        var result = await chain.FetchAsync(Series(), CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.Found, result.Status);
+        Assert.Equal(1, primary.Calls);
+        Assert.Equal(1, fallback.Calls);
+    }
+
+    [Fact]
+    public async Task UnusableCandidateAndFallbackMissBecomeConfirmedMiss()
+    {
+        var primary = new Provider(ThemeFetchResult.CandidateUnavailable("deleted video"));
+        var fallback = new Provider(ThemeFetchResult.NotFound("Plex 404"));
+
+        var result = await new CompositeThemeProvider(primary, fallback)
+            .FetchAsync(Series(), CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
+        Assert.Contains("deleted video", result.Reason);
+        Assert.Contains("Plex 404", result.Reason);
+    }
+
+    [Fact]
     public async Task PrimarySuccessDoesNotCallFallback()
     {
         var primary = new Provider(ThemeFetchResult.Found([1, 2, 3]));

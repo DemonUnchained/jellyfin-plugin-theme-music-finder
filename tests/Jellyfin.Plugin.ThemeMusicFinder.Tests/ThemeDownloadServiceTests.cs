@@ -187,12 +187,16 @@ public sealed class ThemeDownloadServiceTests : IDisposable
     [Theory]
     [InlineData(ThemeFetchStatus.NotFound)]
     [InlineData(ThemeFetchStatus.Transient)]
+    [InlineData(ThemeFetchStatus.CandidateUnavailable)]
     public async Task NeverWritesAFileForANonFoundResult(ThemeFetchStatus status)
     {
         var series = SeriesWithFolder("Unvalidated", "444904");
-        var result = status == ThemeFetchStatus.NotFound
-            ? ThemeFetchResult.NotFound("404")
-            : ThemeFetchResult.Transient("503");
+        var result = status switch
+        {
+            ThemeFetchStatus.NotFound => ThemeFetchResult.NotFound("404"),
+            ThemeFetchStatus.Transient => ThemeFetchResult.Transient("503"),
+            _ => ThemeFetchResult.CandidateUnavailable("dead video")
+        };
 
         var h = Build([series], _ => result);
         var written = await h.Service.RunAsync(null, CancellationToken.None);
@@ -326,12 +330,12 @@ public sealed class ThemeDownloadServiceTests : IDisposable
     }
 
     /// <summary>A transient answer still counts as an upstream request, so it must be reported as
-    /// Fetched rather than Skipped — otherwise the caller skips the throttle and hammers an
+    /// attempted outcome rather than Skipped — otherwise the caller skips the throttle and hammers an
     /// already-struggling upstream exactly when it is failing.</summary>
     [Theory]
     [InlineData(ThemeFetchStatus.NotFound)]
     [InlineData(ThemeFetchStatus.Transient)]
-    public async Task AFailedLookupIsReportedAsFetchedNotSkipped(ThemeFetchStatus status)
+    public async Task AFailedLookupIsReportedAsAttemptedNotSkipped(ThemeFetchStatus status)
     {
         var series = SeriesWithFolder("Asked", "444904");
         var result = status == ThemeFetchStatus.NotFound
@@ -340,8 +344,38 @@ public sealed class ThemeDownloadServiceTests : IDisposable
         var h = Build([series], _ => result);
 
         Assert.Equal(
-            ThemeDownloadService.Outcome.Fetched,
+            status == ThemeFetchStatus.NotFound
+                ? ThemeDownloadService.Outcome.NotFound
+                : ThemeDownloadService.Outcome.Transient,
             await h.Service.RunForSeriesAsync(series, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task FinalSummarySeparatesEveryOutcome()
+    {
+        var written = SeriesWithFolder("Written", "1");
+        var missing = SeriesWithFolder("Missing", "2");
+        var flaky = SeriesWithFolder("Flaky", "3");
+        var skipped = SeriesWithFolder("Skipped", "4");
+        await File.WriteAllTextAsync(ThemePath(skipped), "mine");
+
+        var h = Build([written, missing, flaky, skipped], id => id switch
+        {
+            "1" => ThemeFetchResult.Found(Mp3()),
+            "2" => ThemeFetchResult.NotFound("404"),
+            _ => ThemeFetchResult.Transient("503")
+        });
+
+        await h.Service.RunAsync(null, CancellationToken.None);
+
+        var summary = Assert.Single(
+            h.Log.AtLevel(LogLevel.Information),
+            entry => entry.Message.StartsWith("Theme sweep complete:", StringComparison.Ordinal));
+        Assert.Contains("1 written", summary.Message);
+        Assert.Contains("1 not found", summary.Message);
+        Assert.Contains("1 transient failure(s)", summary.Message);
+        Assert.Contains("1 skipped", summary.Message);
+        Assert.Contains("4 total series scanned", summary.Message);
     }
 
     // ---- I6: backoff is honoured --------------------------------------------------------
