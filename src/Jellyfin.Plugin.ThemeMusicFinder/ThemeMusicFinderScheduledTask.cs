@@ -23,7 +23,7 @@ public class ThemeMusicFinderScheduledTask(
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
     {
-        // Shared with ItemAddedListener: both touch the same ThemeMusicFinder.attempts.json file, and
+        // Shared with ItemAddedListener: both touch the same attempt-history file, and
         // holding this for the whole sweep (which can run several minutes) is intended - item-added
         // work is background and non-urgent, so it queues behind the sweep rather than racing it.
         await ThemeMusicFinderGate.AttemptsFile.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -55,7 +55,9 @@ public class ThemeMusicFinderScheduledTask(
             IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
             var store = new AttemptStore(
-                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts.json"),
+                // v2 intentionally starts fresh: v1.1's negative cache predates AnimeThemes and
+                // would otherwise suppress the new provider for up to seven days after upgrade.
+                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v2.json"),
                 loggerFactory.CreateLogger<AttemptStore>());
             var service = new ThemeDownloadService(
                 libraryManager, providerManager, provider, store, fileSystem,

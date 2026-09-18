@@ -19,6 +19,11 @@ public enum ThemeFetchStatus
     /// on the next run; do not record a failure.</summary>
     Transient,
 
+    /// <summary>The provider identified a specific theme candidate, but that candidate could
+    /// not be used (for example, a deleted YouTube video or a stream download timeout). This
+    /// is not a provider-wide outage, so the chain may safely try its next curated source.</summary>
+    CandidateUnavailable,
+
     /// <summary>This provider cannot safely identify the series. The provider chain may try
     /// another catalogue, but no request was made and this result must not earn backoff.</summary>
     NotApplicable
@@ -43,6 +48,9 @@ public sealed record ThemeFetchResult(
     public static ThemeFetchResult NotFound(string reason) => new(ThemeFetchStatus.NotFound, null, reason);
 
     public static ThemeFetchResult Transient(string reason) => new(ThemeFetchStatus.Transient, null, reason);
+
+    public static ThemeFetchResult CandidateUnavailable(string reason)
+        => new(ThemeFetchStatus.CandidateUnavailable, null, reason);
 
     public static ThemeFetchResult NotApplicable(string reason) => new(ThemeFetchStatus.NotApplicable, null, reason);
 }

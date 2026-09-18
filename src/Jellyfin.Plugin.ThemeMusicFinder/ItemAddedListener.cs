@@ -47,7 +47,7 @@ public class ItemAddedListener(
 
         _ = Task.Run(async () =>
         {
-            // Shared with ThemeMusicFinderScheduledTask: both touch the same ThemeMusicFinder.attempts.json
+            // Shared with ThemeMusicFinderScheduledTask: both touch the same attempt-history
             // file, and this queues behind a running nightly sweep rather than racing it.
             var gateAcquired = false;
             try
@@ -81,7 +81,7 @@ public class ItemAddedListener(
                 IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
                 var store = new AttemptStore(
-                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts.json"),
+                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v2.json"),
                     loggerFactory.CreateLogger<AttemptStore>());
                 await store.LoadAsync(ct).ConfigureAwait(false);
 

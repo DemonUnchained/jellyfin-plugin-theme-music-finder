@@ -88,7 +88,12 @@ internal sealed class ThemerrThemeProvider(HttpClient client, IThemeAudioDownloa
         }
         catch (Exception ex)
         {
-            return ThemeFetchResult.Transient($"YouTube download or conversion failed: {ex.Message}");
+            // ThemerrDB answered successfully and identified one specific video. A failure from
+            // this point is candidate-local (deleted/restricted video, missing audio stream,
+            // stalled media CDN, conversion failure), not evidence that the catalogue itself is
+            // down. Let the curated AnimeThemes/Plex fallbacks try instead of blocking the chain.
+            return ThemeFetchResult.CandidateUnavailable(
+                $"ThemerrDB YouTube candidate was unusable: {ex.Message}");
         }
     }
 

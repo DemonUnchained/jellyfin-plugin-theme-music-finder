@@ -2,9 +2,8 @@ using MediaBrowser.Controller.Entities.TV;
 
 namespace Jellyfin.Plugin.ThemeMusicFinder;
 
-/// <summary>Runs trusted providers in priority order. A transient failure stops the chain:
-/// falling through during an outage would multiply traffic and make the result depend on which
-/// service happened to fail first.</summary>
+/// <summary>Runs trusted providers in priority order. A provider-wide transient failure stops
+/// the chain, but one unusable curated candidate falls through to the next provider.</summary>
 public sealed class CompositeThemeProvider(params IThemeProvider[] providers) : IThemeProvider
 {
     public async Task<ThemeFetchResult> FetchAsync(Series series, CancellationToken ct)
@@ -23,6 +22,10 @@ public sealed class CompositeThemeProvider(params IThemeProvider[] providers) : 
                 case ThemeFetchStatus.NotFound:
                     madeRequest = true;
                     misses.Add(result.Reason ?? "not found");
+                    break;
+                case ThemeFetchStatus.CandidateUnavailable:
+                    madeRequest = true;
+                    misses.Add(result.Reason ?? "candidate unavailable");
                     break;
                 case ThemeFetchStatus.NotApplicable:
                     break;

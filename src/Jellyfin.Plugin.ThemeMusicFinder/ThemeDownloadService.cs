@@ -43,6 +43,11 @@ public class ThemeDownloadService(
         }).OfType<Series>().ToList();
 
         var written = 0;
+        var skipped = 0;
+        var notFound = 0;
+        var transient = 0;
+        var unwritable = 0;
+        var unexpected = 0;
 
         try
         {
@@ -69,10 +74,20 @@ public class ThemeDownloadService(
                     // One sick series (e.g. a refresh failure on locked/corrupt metadata,
                     // or an HttpClient timeout) must not take down the rest of the sweep.
                     logger.LogWarning(ex, "Unexpected error processing {Series}", series[i].Name);
+                    unexpected++;
                     continue;
                 }
 
-                if (result == Outcome.Written) written++;
+                switch (result)
+                {
+                    case Outcome.Skipped: skipped++; break;
+                    case Outcome.Written: written++; break;
+                    case Outcome.NotFound: notFound++; break;
+                    case Outcome.Transient: transient++; break;
+                    case Outcome.Unwritable: unwritable++; break;
+                    default: throw new InvalidOperationException($"Unknown theme outcome {result}.");
+                }
+
                 if (i < series.Count - 1 && result != Outcome.Skipped) await DelayAsync(Throttle, ct).ConfigureAwait(false);
             }
         }
@@ -94,7 +109,9 @@ public class ThemeDownloadService(
         }
 
         progress?.Report(100);
-        logger.LogInformation("Theme sweep complete: {Written} themes written.", written);
+        logger.LogInformation(
+            "Theme sweep complete: {Written} written, {NotFound} not found, {Transient} transient failure(s), {Unwritable} write failure(s), {Unexpected} unexpected error(s), {Skipped} skipped; {Scanned} total series scanned.",
+            written, notFound, transient, unwritable, unexpected, skipped, series.Count);
         return written;
     }
 
@@ -107,7 +124,7 @@ public class ThemeDownloadService(
     public async Task<Outcome> RunForSeriesAsync(Series series, CancellationToken ct)
         => await TryOneAsync(series, ct).ConfigureAwait(false);
 
-    public enum Outcome { Skipped, Written, Fetched, Unwritable }
+    public enum Outcome { Skipped, Written, NotFound, Transient, Unwritable }
 
     private async Task<Outcome> TryOneAsync(Series series, CancellationToken ct)
     {
@@ -137,10 +154,10 @@ public class ThemeDownloadService(
         {
             // Transient: do NOT record a failure, so it retries on the next run.
             logger.LogWarning(ex, "Theme fetch failed for {Series}", series.Name);
-            return Outcome.Fetched;
+            return Outcome.Transient;
         }
 
-        if (fetch.Status == ThemeFetchStatus.NotFound)
+        if (fetch.Status is ThemeFetchStatus.NotFound or ThemeFetchStatus.CandidateUnavailable)
         {
             // The only case that earns a backoff. Information, not Debug: Jellyfin does not emit
             // Debug at its default level, and "why did nothing happen?" is the question a user
@@ -149,7 +166,7 @@ public class ThemeDownloadService(
             logger.LogInformation(
                 "No theme available for {Series} (tvdb {Tvdb}, tmdb {Tmdb}): {Reason}. Will not ask again for {Days} day(s).",
                 series.Name, tvdbId ?? "none", tmdbId ?? "none", fetch.Reason, retryAfterDays);
-            return Outcome.Fetched;
+            return Outcome.NotFound;
         }
 
         if (fetch.Status == ThemeFetchStatus.Transient)
@@ -159,7 +176,7 @@ public class ThemeDownloadService(
             logger.LogWarning(
                 "Theme lookup for {Series} (tvdb {Tvdb}, tmdb {Tmdb}) did not succeed: {Reason}. Not recording a failure; will retry on the next run.",
                 series.Name, tvdbId ?? "none", tmdbId ?? "none", fetch.Reason);
-            return Outcome.Fetched;
+            return Outcome.Transient;
         }
 
         if (fetch.Status == ThemeFetchStatus.NotApplicable)

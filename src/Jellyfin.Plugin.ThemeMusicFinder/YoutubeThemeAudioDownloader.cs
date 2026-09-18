@@ -15,6 +15,7 @@ internal sealed class YoutubeThemeAudioDownloader(
 {
     private const long MaxSourceBytes = 50L * 1024 * 1024;
     private const long MaxMp3Bytes = 8L * 1024 * 1024;
+    private static readonly TimeSpan CandidateTimeout = TimeSpan.FromSeconds(60);
 
     public async Task<byte[]> DownloadMp3Async(Uri source, CancellationToken ct)
     {
@@ -26,25 +27,54 @@ internal sealed class YoutubeThemeAudioDownloader(
 
         try
         {
-            var youtube = new YoutubeClient();
-            var manifest = await youtube.Videos.Streams
-                .GetManifestAsync(source.ToString(), ct)
-                .ConfigureAwait(false);
+            // YoutubeExplode's default HttpClient has a 100-second whole-request timeout. In
+            // practice a throttled/dead CDN response held the entire sequential sweep for that
+            // full interval, seven times in one run. Give the complete candidate a bounded
+            // budget and let the provider chain move on when it expires.
+            using var candidateCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            candidateCts.CancelAfter(CandidateTimeout);
+            using var youtubeHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+            using var youtube = new YoutubeClient(youtubeHttp);
+
+            YoutubeExplode.Videos.Streams.StreamManifest manifest;
+            try
+            {
+                manifest = await youtube.Videos.Streams
+                    .GetManifestAsync(source.ToString(), candidateCts.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"YouTube candidate exceeded the {CandidateTimeout.TotalSeconds:0}-second time limit.");
+            }
+
             var audio = manifest.GetAudioOnlyStreams().ToList();
             var mp4 = audio.Where(stream => stream.Container == Container.Mp4).ToList();
             IStreamInfo? selected = null;
             if (mp4.Count > 0)
             {
-                selected = mp4.GetWithHighestBitrate();
+                // The smallest AAC stream is normally still around 128 kbps and is much less
+                // likely to trip YouTube's throttling than requesting the largest representation.
+                selected = mp4.OrderBy(stream => stream.Size.Bytes).First();
             }
             else if (audio.Count > 0)
             {
-                selected = audio.GetWithHighestBitrate();
+                selected = audio.OrderBy(stream => stream.Size.Bytes).First();
+            }
+            else
+            {
+                // Some videos expose no separate audio-only representation. A small muxed stream
+                // is safe because FFmpeg maps only 0:a:0, and the same 50 MiB cap still applies.
+                selected = manifest.GetMuxedStreams()
+                    .Where(stream => stream.Size.Bytes <= MaxSourceBytes)
+                    .OrderBy(stream => stream.Size.Bytes)
+                    .FirstOrDefault();
             }
 
             if (selected is null)
             {
-                throw new InvalidOperationException("YouTube exposed no audio-only stream.");
+                throw new InvalidOperationException("YouTube exposed no usable audio stream.");
             }
 
             if (selected.Size.Bytes > MaxSourceBytes)
@@ -52,9 +82,17 @@ internal sealed class YoutubeThemeAudioDownloader(
                 throw new InvalidOperationException("YouTube audio stream exceeds the 50 MiB safety limit.");
             }
 
-            await youtube.Videos.Streams
-                .DownloadAsync(selected, inputPath, progress: null, ct)
-                .ConfigureAwait(false);
+            try
+            {
+                await youtube.Videos.Streams
+                    .DownloadAsync(selected, inputPath, progress: null, candidateCts.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                throw new TimeoutException(
+                    $"YouTube candidate exceeded the {CandidateTimeout.TotalSeconds:0}-second time limit.");
+            }
 
             if (audioProcessor is not null)
             {
