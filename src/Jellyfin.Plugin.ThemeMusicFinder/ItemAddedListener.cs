@@ -57,16 +57,28 @@ public class ItemAddedListener(
 
                 using var plexHttp = PlexThemeProvider.CreateClient();
                 using var themerrHttp = ThemerrThemeProvider.CreateClient();
+                using var animeThemesHttp = AnimeThemesProvider.CreateClient();
+                var config = ThemeMusicFinderPlugin.Instance?.Configuration ?? new PluginConfiguration();
+                var audioProcessor = new FfmpegThemeAudioProcessor(
+                    appPaths,
+                    mediaEncoder,
+                    config.EnableLoudnessNormalization,
+                    config.NormalizationTargetLufs);
 
-                IThemeProvider provider = new PlexThemeProvider(plexHttp);
-                if (ThemeMusicFinderPlugin.Instance?.Configuration.EnableThemerrFallback != false)
+                var providers = new List<IThemeProvider>();
+                if (config.EnableThemerrFallback)
                 {
-                    provider = new CompositeThemeProvider(
-                        provider,
-                        new ThemerrThemeProvider(
-                            themerrHttp,
-                            new YoutubeThemeAudioDownloader(appPaths, mediaEncoder)));
+                    providers.Add(new ThemerrThemeProvider(
+                        themerrHttp,
+                        new YoutubeThemeAudioDownloader(appPaths, mediaEncoder, audioProcessor)));
                 }
+
+                if (config.EnableAnimeThemes)
+                    providers.Add(new AnimeThemesProvider(animeThemesHttp, audioProcessor));
+                providers.Add(new PlexThemeProvider(
+                    plexHttp,
+                    config.EnableLoudnessNormalization ? audioProcessor : null));
+                IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
                 var store = new AttemptStore(
                     Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts.json"),

@@ -23,6 +23,22 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>Fetch a theme as soon as a new series is added.</summary>
     public bool EnableItemAddedHook { get; set; } = true;
 
-    /// <summary>After a definitive Plex miss, try ThemerrDB's curated TMDB-to-YouTube mapping.</summary>
+    /// <summary>Use ThemerrDB's curated TMDB-to-YouTube mapping as the preferred source.
+    /// The legacy property name is retained so existing installations keep their setting.</summary>
     public bool EnableThemerrFallback { get; set; } = true;
+
+    /// <summary>After a ThemerrDB miss, try a strictly matched AnimeThemes opening.</summary>
+    public bool EnableAnimeThemes { get; set; } = true;
+
+    /// <summary>Normalize new downloads with FFmpeg so themes play at a consistent volume.</summary>
+    public bool EnableLoudnessNormalization { get; set; } = true;
+
+    private double _normalizationTargetLufs = -18.0;
+
+    /// <summary>EBU R128 integrated loudness target, constrained to a safe range.</summary>
+    public double NormalizationTargetLufs
+    {
+        get => _normalizationTargetLufs;
+        set => _normalizationTargetLufs = Math.Clamp(value, -24.0, -12.0);
+    }
 }

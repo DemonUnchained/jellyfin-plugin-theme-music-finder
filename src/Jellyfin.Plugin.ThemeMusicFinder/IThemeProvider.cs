@@ -30,9 +30,15 @@ public enum ThemeFetchStatus
 /// <see cref="ThemeFetchStatus.Found"/>.</param>
 /// <param name="Reason">Short human-readable detail for the log. Null for
 /// <see cref="ThemeFetchStatus.Found"/>.</param>
-public sealed record ThemeFetchResult(ThemeFetchStatus Status, byte[]? Body, string? Reason)
+public sealed record ThemeFetchResult(
+    ThemeFetchStatus Status,
+    byte[]? Body,
+    string? Reason,
+    string? Source = null,
+    Uri? SourceUri = null)
 {
-    public static ThemeFetchResult Found(byte[] body) => new(ThemeFetchStatus.Found, body, null);
+    public static ThemeFetchResult Found(byte[] body, string? source = null, Uri? sourceUri = null)
+        => new(ThemeFetchStatus.Found, body, null, source, sourceUri);
 
     public static ThemeFetchResult NotFound(string reason) => new(ThemeFetchStatus.NotFound, null, reason);
 

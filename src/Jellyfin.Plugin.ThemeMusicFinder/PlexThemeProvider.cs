@@ -1,17 +1,24 @@
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Entities;
 
 namespace Jellyfin.Plugin.ThemeMusicFinder;
 
-public class PlexThemeProvider(HttpClient client) : IThemeProvider
+public class PlexThemeProvider(HttpClient client, IThemeAudioProcessor? audioProcessor = null) : IThemeProvider
 {
     private const string UrlTemplate = "https://tvthemes.plexapp.com/{0}.mp3";
 
     /// <summary>Identifies the plugin to the upstream so its operator can see who is calling
     /// and reach us if we misbehave. It is a free service with no SLA.</summary>
-    public const string UserAgent = "Jellyfin-ThemeMusicFinder/1.1 (+https://github.com/DemonUnchained/jellyfin-plugin-theme-music-finder)";
+    public const string UserAgent = "Jellyfin-ThemeMusicFinder/1.2 (+https://github.com/DemonUnchained/jellyfin-plugin-theme-music-finder)";
+
+    // Plex currently maps A Knight of the Seven Kingdoms (TVDB 433631) to the unrelated
+    // production-library track "Barber of Seville". Pin both the ID and content hash so a
+    // corrected upstream file immediately starts working without a plugin update.
+    private const string KnownBadKnightThemeSha256 =
+        "4e3885fd0c2662a9cffb13caacd47827f1ffbe19cbb22487487a81755d266940";
 
     /// <summary>A theme is a few hundred KB. Anything past this is not a theme, and buffering it
     /// into a NAS's memory before validation is how a misbehaving response becomes an OOM.</summary>
@@ -61,7 +68,34 @@ public class PlexThemeProvider(HttpClient client) : IThemeProvider
 
         var body = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
         var contentType = response.Content.Headers.ContentType?.MediaType;
-        if (ThemeFile.IsValidMp3(body, contentType)) return ThemeFetchResult.Found(body);
+        if (ThemeFile.IsValidMp3(body, contentType))
+        {
+            if (IsKnownIncorrectMapping(tvdbId, Convert.ToHexStringLower(SHA256.HashData(body))))
+            {
+                return ThemeFetchResult.NotFound(
+                    "Plex returned a known incorrect 'Barber of Seville' mapping");
+            }
+
+            if (audioProcessor is not null)
+            {
+                try
+                {
+                    body = await audioProcessor
+                        .ConvertToNormalizedMp3Async(body, ".mp3", ct)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    return ThemeFetchResult.Transient($"Plex theme normalization failed: {ex.Message}");
+                }
+            }
+
+            return ThemeFetchResult.Found(body, "Plex", new Uri(url));
+        }
 
         // A 200 carrying something that is not an MP3 means a truncated download, a CDN error
         // page, or a captive portal. None of those prove the theme does not exist, so this must
@@ -72,4 +106,8 @@ public class PlexThemeProvider(HttpClient client) : IThemeProvider
             body.Length,
             contentType ?? "no content-type"));
     }
+
+    internal static bool IsKnownIncorrectMapping(string tvdbId, string sha256)
+        => tvdbId == "433631"
+            && sha256.Equals(KnownBadKnightThemeSha256, StringComparison.OrdinalIgnoreCase);
 }

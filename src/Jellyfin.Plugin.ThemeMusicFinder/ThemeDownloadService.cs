@@ -196,7 +196,13 @@ public class ThemeDownloadService(
             new MetadataRefreshOptions(new DirectoryService(fileSystem)),
             ct).ConfigureAwait(false);
 
-        logger.LogInformation("Saved theme for {Series}", series.Name);
+        logger.LogInformation(
+            "Saved theme for {Series} from {Source} (tvdb {Tvdb}, tmdb {Tmdb}; source {SourceUri})",
+            series.Name,
+            fetch.Source ?? "unknown provider",
+            tvdbId ?? "none",
+            tmdbId ?? "none",
+            fetch.SourceUri?.ToString() ?? "not reported");
         return Outcome.Written;
     }
 }

@@ -10,7 +10,8 @@ namespace Jellyfin.Plugin.ThemeMusicFinder;
 /// create a real MP3. Naming an AAC/WebM stream theme.mp3 is not sufficient for every client.</summary>
 internal sealed class YoutubeThemeAudioDownloader(
     IApplicationPaths appPaths,
-    IMediaEncoder mediaEncoder) : IThemeAudioDownloader
+    IMediaEncoder mediaEncoder,
+    IThemeAudioProcessor? audioProcessor = null) : IThemeAudioDownloader
 {
     private const long MaxSourceBytes = 50L * 1024 * 1024;
     private const long MaxMp3Bytes = 8L * 1024 * 1024;
@@ -54,6 +55,16 @@ internal sealed class YoutubeThemeAudioDownloader(
             await youtube.Videos.Streams
                 .DownloadAsync(selected, inputPath, progress: null, ct)
                 .ConfigureAwait(false);
+
+            if (audioProcessor is not null)
+            {
+                var sourceBytes = await File.ReadAllBytesAsync(inputPath, ct).ConfigureAwait(false);
+                var extension = selected.Container == Container.Mp4 ? ".m4a" : ".webm";
+                return await audioProcessor
+                    .ConvertToNormalizedMp3Async(sourceBytes, extension, ct)
+                    .ConfigureAwait(false);
+            }
+
             await TranscodeAsync(inputPath, outputPath, ct).ConfigureAwait(false);
 
             var info = new FileInfo(outputPath);

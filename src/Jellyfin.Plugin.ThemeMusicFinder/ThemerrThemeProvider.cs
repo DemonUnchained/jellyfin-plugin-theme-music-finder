@@ -6,7 +6,7 @@ using MediaBrowser.Model.Entities;
 
 namespace Jellyfin.Plugin.ThemeMusicFinder;
 
-/// <summary>Fallback backed by ThemerrDB's curated TMDB-to-YouTube mapping.</summary>
+/// <summary>Primary provider backed by ThemerrDB's curated TMDB-to-YouTube mapping.</summary>
 internal sealed class ThemerrThemeProvider(HttpClient client, IThemeAudioDownloader downloader) : IThemeProvider
 {
     private const string UrlTemplate = "https://app.lizardbyte.dev/ThemerrDB/tv_shows/themoviedb/{0}.json";
@@ -55,6 +55,13 @@ internal sealed class ThemerrThemeProvider(HttpClient client, IThemeAudioDownloa
         {
             await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
             using var json = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+            if (json.RootElement.TryGetProperty("id", out var idProperty)
+                && idProperty.ToString() != tmdbId)
+            {
+                return ThemeFetchResult.Transient(
+                    $"ThemerrDB returned TMDB ID {idProperty} for requested ID {tmdbId}");
+            }
+
             if (!json.RootElement.TryGetProperty("youtube_theme_url", out var property)
                 || property.ValueKind != JsonValueKind.String
                 || !Uri.TryCreate(property.GetString(), UriKind.Absolute, out videoUri)
@@ -72,7 +79,7 @@ internal sealed class ThemerrThemeProvider(HttpClient client, IThemeAudioDownloa
         {
             var body = await downloader.DownloadMp3Async(videoUri, ct).ConfigureAwait(false);
             return ThemeFile.IsValidMp3(body, "audio/mpeg")
-                ? ThemeFetchResult.Found(body)
+                ? ThemeFetchResult.Found(body, "ThemerrDB", videoUri)
                 : ThemeFetchResult.Transient("YouTube conversion did not produce a valid MP3");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

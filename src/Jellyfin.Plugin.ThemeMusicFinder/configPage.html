@@ -3,9 +3,9 @@
     <p class="fieldDescription" style="margin-bottom:1.5em">
         Saves themes as <code>theme.mp3</code> in each series folder, so Jellyfin needs
         <strong>write access</strong> to your TV library. The plugin searches the public
-        Plex TV Themes catalog using each series&rsquo; TVDB identifier. If Plex has no
-        match, the optional ThemerrDB fallback uses the series&rsquo; TMDB identifier and
-        converts its curated YouTube theme to MP3 with Jellyfin&rsquo;s FFmpeg.
+        ThemerrDB catalog using each series&rsquo; TMDB identifier, then strictly matched
+        AnimeThemes openings, then Plex TV Themes by TVDB identifier. Curated source
+        audio is converted to MP3 with Jellyfin&rsquo;s FFmpeg.
         An existing <code>theme.mp3</code> is never overwritten.
     </p>
     <form id="ThemeMusicFinderConfigForm">
@@ -20,8 +20,21 @@
       </label>
       <label class="checkboxContainer">
         <input is="emby-checkbox" type="checkbox" id="EnableThemerrFallback" />
-        <span>Use ThemerrDB as a fallback when Plex has no theme</span>
+        <span>Use ThemerrDB as the preferred theme source</span>
       </label>
+      <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableAnimeThemes" />
+        <span>Use AnimeThemes for strictly matched anime openings</span>
+      </label>
+      <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableLoudnessNormalization" />
+        <span>Normalize newly downloaded themes</span>
+      </label>
+      <div class="inputContainer">
+        <label class="inputLabel" for="NormalizationTargetLufs">Loudness target (LUFS)</label>
+        <input id="NormalizationTargetLufs" name="NormalizationTargetLufs" type="number" min="-24" max="-12" step="0.5" required is="emby-input" />
+        <div class="fieldDescription">-18 LUFS is recommended. True peak is limited to -1.5 dBTP.</div>
+      </div>
       <button is="emby-button" type="submit" class="raised button-submit block"><span>Save</span></button>
     </form>
 
@@ -37,8 +50,9 @@
           <li>Skip if a <code>theme.mp3</code> is already there.</li>
           <li>Read its TVDB and TMDB IDs from Jellyfin metadata.</li>
           <li>Skip if it failed recently (see the retry interval).</li>
-          <li>Try Plex by TVDB ID. Only a confirmed miss falls through to ThemerrDB by TMDB ID.</li>
+          <li>Try ThemerrDB by TMDB ID, then an exact title/year AnimeThemes match, then Plex by TVDB ID.</li>
           <li>Download, throttled to about one series per second.</li>
+          <li>Normalize new downloads to the configured loudness target.</li>
           <li>Validate it is a real MP3 &mdash; a missing theme returns an error page, not a 404.</li>
           <li>Write to a temp file, then rename it into place.</li>
           <li>Refresh the item, or Jellyfin never notices the file.</li>
@@ -63,6 +77,9 @@
         document.querySelector('#RetryAfterDays').value = config.RetryAfterDays;
         document.querySelector('#EnableItemAddedHook').checked = config.EnableItemAddedHook;
         document.querySelector('#EnableThemerrFallback').checked = config.EnableThemerrFallback !== false;
+        document.querySelector('#EnableAnimeThemes').checked = config.EnableAnimeThemes !== false;
+        document.querySelector('#EnableLoudnessNormalization').checked = config.EnableLoudnessNormalization !== false;
+        document.querySelector('#NormalizationTargetLufs').value = config.NormalizationTargetLufs || -18;
         Dashboard.hideLoadingMsg();
       }).catch(function (err) {
         Dashboard.hideLoadingMsg();
@@ -79,6 +96,10 @@
         config.RetryAfterDays = isNaN(retryAfterDays) || retryAfterDays < 1 ? 1 : retryAfterDays;
         config.EnableItemAddedHook = document.querySelector('#EnableItemAddedHook').checked;
         config.EnableThemerrFallback = document.querySelector('#EnableThemerrFallback').checked;
+        config.EnableAnimeThemes = document.querySelector('#EnableAnimeThemes').checked;
+        config.EnableLoudnessNormalization = document.querySelector('#EnableLoudnessNormalization').checked;
+        var targetLufs = parseFloat(document.querySelector('#NormalizationTargetLufs').value);
+        config.NormalizationTargetLufs = isNaN(targetLufs) ? -18 : Math.max(-24, Math.min(-12, targetLufs));
         return ApiClient.updatePluginConfiguration(ThemeMusicFinderPluginId, config);
       }).then(Dashboard.processPluginConfigurationUpdateResult).catch(function (err) {
         Dashboard.hideLoadingMsg();
