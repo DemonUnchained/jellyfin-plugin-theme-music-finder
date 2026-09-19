@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.1.2
+
+- Added `YoutubeExplode.dll` to the Jellyfin 12.1 local manifest assembly list,
+  allowing the plugin loader to resolve the dependency during startup instead
+  of marking the plugin `NotSupported`.
+- Extended the packaging check to require declarations for both runtime
+  assemblies.
+- No provider, matching, normalization, or no-overwrite behavior changed from
+  1.2.1.0.
+
 ## 1.2.1.1
 
 - Added the Jellyfin 12.1 local `meta.json` manifest to the catalog ZIP with an

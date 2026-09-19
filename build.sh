@@ -4,7 +4,7 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 publish_dir="$project_dir/artifacts/publish"
 dist_dir="$project_dir/dist"
-version="1.2.1.1"
+version="1.2.1.2"
 
 dotnet publish "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/Jellyfin.Plugin.ThemeMusicFinder.csproj" \
   -c Release \
@@ -37,10 +37,12 @@ if [[ "$actual_contents" != "$expected_contents" ]]; then
   exit 1
 fi
 
-if ! grep -Fq '"Jellyfin.Plugin.ThemeMusicFinder.dll"' \
-  "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/meta.json"; then
-  echo "meta.json does not declare the plugin assembly." >&2
-  exit 1
-fi
+for assembly in Jellyfin.Plugin.ThemeMusicFinder.dll YoutubeExplode.dll; do
+  if ! grep -Fq "\"$assembly\"" \
+    "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/meta.json"; then
+    echo "meta.json does not declare $assembly." >&2
+    exit 1
+  fi
+done
 
 printf '%s\n' "$archive"
