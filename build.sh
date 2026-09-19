@@ -4,7 +4,7 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 publish_dir="$project_dir/artifacts/publish"
 dist_dir="$project_dir/dist"
-version="1.2.1.0"
+version="1.2.1.1"
 
 dotnet publish "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/Jellyfin.Plugin.ThemeMusicFinder.csproj" \
   -c Release \
@@ -20,7 +20,27 @@ rm -f "$archive"
 zip -q -9 -j "$archive" \
   "$publish_dir/Jellyfin.Plugin.ThemeMusicFinder.dll" \
   "$publish_dir/YoutubeExplode.dll" \
+  "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/meta.json" \
   "$project_dir/LICENSE" \
   "$project_dir/THIRD_PARTY_NOTICES.md"
+
+expected_contents="$(printf '%s\n' \
+  'Jellyfin.Plugin.ThemeMusicFinder.dll' \
+  'LICENSE' \
+  'THIRD_PARTY_NOTICES.md' \
+  'YoutubeExplode.dll' \
+  'meta.json' | sort)"
+actual_contents="$(unzip -Z1 "$archive" | sort)"
+
+if [[ "$actual_contents" != "$expected_contents" ]]; then
+  printf '%s\n' "Catalog ZIP has an invalid runtime layout:" "$actual_contents" >&2
+  exit 1
+fi
+
+if ! grep -Fq '"Jellyfin.Plugin.ThemeMusicFinder.dll"' \
+  "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/meta.json"; then
+  echo "meta.json does not declare the plugin assembly." >&2
+  exit 1
+fi
 
 printf '%s\n' "$archive"

@@ -1,7 +1,7 @@
 ---
 name: "Theme Music Finder"
 guid: "03459bac-6165-4b2d-b05f-40b953159b59"
-version: "1.2.1.0"
+version: "1.2.1.1"
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 overview: "Finds missing TV series theme music and saves it as theme.mp3."
@@ -15,4 +15,4 @@ owner: "DemonUnchained"
 artifacts:
   - "Jellyfin.Plugin.ThemeMusicFinder.dll"
   - "YoutubeExplode.dll"
-changelog: "Falls through when an individual ThemerrDB YouTube candidate fails, bounds YouTube attempts to 60 seconds, supports small muxed streams, resets the pre-AnimeThemes negative cache, and logs complete sweep totals."
+changelog: "Repairs Jellyfin 12.1 catalog installation by packaging a local manifest that declares the plugin assembly. Retains the 1.2.1 provider fallthrough, timeout, cache, and scan-summary fixes."

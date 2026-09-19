@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.2.1.1
+
+- Added the Jellyfin 12.1 local `meta.json` manifest to the catalog ZIP with an
+  explicit assembly declaration, preventing a successful install from
+  disappearing after server restart.
+- Added a packaging check that rejects nested, missing, or unexpected catalog
+  ZIP contents before a release can be published.
+- No provider, matching, normalization, or no-overwrite behavior changed from
+  1.2.1.0.
+
 ## 1.2.1.0
 
 - Allows a dead, restricted, streamless, timed-out, or unconvertible ThemerrDB

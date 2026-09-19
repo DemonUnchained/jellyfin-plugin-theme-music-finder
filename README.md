@@ -67,11 +67,13 @@ exact title/year match only; generic title guessing is never used.
 2. Create this folder:
 
    ```text
-   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.0/
+   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.1/
    ```
 
-3. Extract both `Jellyfin.Plugin.ThemeMusicFinder.dll` and `YoutubeExplode.dll`
-   from the release ZIP into that folder.
+3. Extract `Jellyfin.Plugin.ThemeMusicFinder.dll`, `YoutubeExplode.dll`, and
+   `meta.json` from the release ZIP into that folder. Jellyfin 12.1 requires the
+   manifest's assembly declaration to load catalog-installed plugins after a
+   restart.
 4. Start Jellyfin.
 5. Open **Dashboard → Plugins → My Plugins → Theme Music Finder** and set the
    retry interval and loudness target. ThemerrDB, strict AnimeThemes fallback,
@@ -106,7 +108,7 @@ dotnet test tests/Jellyfin.Plugin.ThemeMusicFinder.Tests/Jellyfin.Plugin.ThemeMu
 ./build.sh
 ```
 
-The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.0.zip`.
+The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.1.zip`.
 
 ## Source and license
 
