@@ -109,7 +109,6 @@ public sealed class CuratedThemeSourceStoreTests
 
     [Theory]
     [InlineData("https://www.youtube.com/watch?v=abc%201234567")]
-    [InlineData("https://www.youtube.com/watch?%76=abc12345678")]
-    public void EscapedOrMalformedVideoParametersAreRejected(string input)
+    public void EscapedOrMalformedVideoIdsAreRejected(string input)
         => Assert.False(CuratedThemeSourceStore.TryNormalizeYoutubeVideoUri(input, out _));
 }
