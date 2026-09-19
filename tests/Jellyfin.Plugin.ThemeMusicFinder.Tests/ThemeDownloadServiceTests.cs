@@ -314,6 +314,22 @@ public sealed class ThemeDownloadServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UnusableCandidateDoesNotRecordAFailure()
+    {
+        var series = SeriesWithFolder("SlowVideo", "444904");
+        var h = Build([series], _ => ThemeFetchResult.CandidateUnavailable("media CDN timed out"));
+
+        Assert.Equal(
+            ThemeDownloadService.Outcome.Transient,
+            await h.Service.RunForSeriesAsync(series, CancellationToken.None));
+        await h.Store.SaveAsync(CancellationToken.None);
+
+        var reloaded = new AttemptStore(h.AttemptsPath);
+        await reloaded.LoadAsync(CancellationToken.None);
+        Assert.True(reloaded.ShouldTry("444904", 7, DateTimeOffset.UtcNow));
+    }
+
+    [Fact]
     public async Task RepeatedIdenticalTransientsProduceOneWarningPerRun()
     {
         var series = Enumerable.Range(1, 3)

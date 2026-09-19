@@ -82,7 +82,7 @@ public sealed class CompositeThemeProviderTests
     }
 
     [Fact]
-    public async Task UnusableCandidateAndFallbackMissBecomeConfirmedMiss()
+    public async Task UnusableCandidateAndFallbackMissRemainRetryable()
     {
         var primary = new Provider(ThemeFetchResult.CandidateUnavailable("deleted video"));
         var fallback = new Provider(ThemeFetchResult.NotFound("Plex 404"));
@@ -90,7 +90,7 @@ public sealed class CompositeThemeProviderTests
         var result = await new CompositeThemeProvider(primary, fallback)
             .FetchAsync(Series(), CancellationToken.None);
 
-        Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
+        Assert.Equal(ThemeFetchStatus.Transient, result.Status);
         Assert.Contains("deleted video", result.Reason);
         Assert.Contains("Plex 404", result.Reason);
     }

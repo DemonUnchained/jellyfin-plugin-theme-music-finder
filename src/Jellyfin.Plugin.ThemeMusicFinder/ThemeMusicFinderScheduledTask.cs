@@ -55,9 +55,9 @@ public class ThemeMusicFinderScheduledTask(
             IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
             var store = new AttemptStore(
-                // v2 intentionally starts fresh: v1.1's negative cache predates AnimeThemes and
-                // would otherwise suppress the new provider for up to seven days after upgrade.
-                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v2.json"),
+                // v3 intentionally starts fresh: v1.2.1.3 incorrectly stored an unusable
+                // YouTube candidate as a confirmed miss, suppressing a retry for seven days.
+                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v3.json"),
                 loggerFactory.CreateLogger<AttemptStore>());
             var service = new ThemeDownloadService(
                 libraryManager, providerManager, provider, store, fileSystem,

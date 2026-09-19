@@ -167,7 +167,7 @@ public class ThemeDownloadService(
             return Outcome.Transient;
         }
 
-        if (fetch.Status is ThemeFetchStatus.NotFound or ThemeFetchStatus.CandidateUnavailable)
+        if (fetch.Status == ThemeFetchStatus.NotFound)
         {
             // The only case that earns a backoff. Information, not Debug: Jellyfin does not emit
             // Debug at its default level, and "why did nothing happen?" is the question a user
@@ -179,10 +179,12 @@ public class ThemeDownloadService(
             return Outcome.NotFound;
         }
 
-        if (fetch.Status == ThemeFetchStatus.Transient)
+        if (fetch.Status is ThemeFetchStatus.Transient or ThemeFetchStatus.CandidateUnavailable)
         {
             // Deliberately NOT recorded. A bad hour upstream must not mark the whole library
-            // themeless for the length of the backoff window.
+            // themeless for the length of the backoff window. CandidateUnavailable is normally
+            // collapsed to Transient by CompositeThemeProvider, but handling it here keeps a
+            // direct provider from accidentally earning backoff.
             LogTransientOnce(series, tvdbId, tmdbId, fetch.Reason ?? "transient provider failure");
             return Outcome.Transient;
         }

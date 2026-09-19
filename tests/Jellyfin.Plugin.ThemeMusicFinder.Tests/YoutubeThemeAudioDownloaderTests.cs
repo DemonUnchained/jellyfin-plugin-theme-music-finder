@@ -20,8 +20,11 @@ public sealed class YoutubeThemeAudioDownloaderTests
             [
                 "--config-locations", "/config/trailer-tools/yt-dlp.conf",
                 "--no-playlist",
-                "--quiet",
-                "--no-warnings",
+                "--no-progress",
+                "--socket-timeout", "20",
+                "--retries", "3",
+                "--fragment-retries", "3",
+                "--extractor-retries", "3",
                 "--format", "ba[ext=m4a]/ba",
                 "--max-filesize", "50M",
                 "--output", "/cache/theme.%(ext)s",

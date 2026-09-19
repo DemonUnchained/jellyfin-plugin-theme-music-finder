@@ -23,8 +23,9 @@ This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
   `Barber of Seville` mapping for *A Knight of the Seven Kingdoms*.
 - Downloads ThemerrDB's curated YouTube source with the Trailer Reel `yt-dlp`
   installation when it is available, with YoutubeExplode retained as a
-  self-contained fallback. Both paths use a 60-second per-candidate limit and
-  convert the result to a real MP3 with Jellyfin's configured FFmpeg binary. A
+  self-contained fallback. `yt-dlp` gets a bounded three-minute budget for its
+  socket retries; YoutubeExplode keeps a 60-second limit. Both convert the result
+  to a real MP3 with Jellyfin's configured FFmpeg binary. A
   dead, blocked, streamless, or timed-out video falls through to AnimeThemes and
   Plex.
 - Continues to later independent providers after a temporary provider failure;
@@ -74,7 +75,7 @@ exact title/year match only; generic title guessing is never used.
 2. Create this folder:
 
    ```text
-   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.3/
+   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.4/
    ```
 
 3. Extract `Jellyfin.Plugin.ThemeMusicFinder.dll`, `YoutubeExplode.dll`, and
@@ -115,7 +116,7 @@ dotnet test tests/Jellyfin.Plugin.ThemeMusicFinder.Tests/Jellyfin.Plugin.ThemeMu
 ./build.sh
 ```
 
-The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.3.zip`.
+The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.4.zip`.
 
 ## Source and license
 

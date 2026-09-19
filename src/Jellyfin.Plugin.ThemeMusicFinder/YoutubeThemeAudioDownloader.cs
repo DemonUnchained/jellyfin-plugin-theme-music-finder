@@ -15,7 +15,12 @@ internal sealed class YoutubeThemeAudioDownloader(
 {
     private const long MaxSourceBytes = 50L * 1024 * 1024;
     private const long MaxMp3Bytes = 8L * 1024 * 1024;
-    private static readonly TimeSpan CandidateTimeout = TimeSpan.FromSeconds(60);
+    // yt-dlp may spend one 20-second socket timeout resolving a YouTube manifest before it
+    // starts the small media download. A 60-second whole-process limit killed a healthy retry
+    // for the curated A Knight of the Seven Kingdoms video. Keep retries bounded, but give the
+    // external downloader enough wall-clock time to finish them.
+    private static readonly TimeSpan YtDlpCandidateTimeout = TimeSpan.FromMinutes(3);
+    private static readonly TimeSpan YoutubeExplodeCandidateTimeout = TimeSpan.FromSeconds(60);
 
     public async Task<byte[]> DownloadMp3Async(Uri source, CancellationToken ct)
     {
@@ -50,12 +55,6 @@ internal sealed class YoutubeThemeAudioDownloader(
                 }
                 catch (OperationCanceledException) when (ct.IsCancellationRequested)
                 {
-                    throw;
-                }
-                catch (TimeoutException)
-                {
-                    // Both extractors use the same bounded candidate budget. Do not double a
-                    // stalled video's cost by immediately spending another full timeout.
                     throw;
                 }
                 catch (Exception ex)
@@ -112,7 +111,7 @@ internal sealed class YoutubeThemeAudioDownloader(
         }
 
         using var candidateCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        candidateCts.CancelAfter(CandidateTimeout);
+        candidateCts.CancelAfter(YtDlpCandidateTimeout);
         using var registration = candidateCts.Token.Register(() =>
         {
             try
@@ -128,16 +127,20 @@ internal sealed class YoutubeThemeAudioDownloader(
             }
         });
 
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(candidateCts.Token);
-        var stderrTask = process.StandardError.ReadToEndAsync(candidateCts.Token);
+        // Do not cancel the pipe readers with the candidate token. The timeout callback kills
+        // the process, which closes both pipes and lets us retain its final diagnostic line.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
         try
         {
             await process.WaitForExitAsync(candidateCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            var timeoutStderr = await ReadProcessOutputAfterKillAsync(stderrTask).ConfigureAwait(false);
             throw new TimeoutException(
-                $"yt-dlp candidate exceeded the {CandidateTimeout.TotalSeconds:0}-second time limit.");
+                $"yt-dlp candidate exceeded the {YtDlpCandidateTimeout.TotalSeconds:0}-second time limit: "
+                + LastUsefulLine(timeoutStderr));
         }
 
         var stdout = await stdoutTask.ConfigureAwait(false);
@@ -185,8 +188,11 @@ internal sealed class YoutubeThemeAudioDownloader(
         foreach (var argument in new[]
         {
             "--no-playlist",
-            "--quiet",
-            "--no-warnings",
+            "--no-progress",
+            "--socket-timeout", "20",
+            "--retries", "3",
+            "--fragment-retries", "3",
+            "--extractor-retries", "3",
             "--format", "ba[ext=m4a]/ba",
             "--max-filesize", "50M",
             "--output", outputTemplate,
@@ -199,6 +205,18 @@ internal sealed class YoutubeThemeAudioDownloader(
         return startInfo;
     }
 
+    private static async Task<string> ReadProcessOutputAfterKillAsync(Task<string> outputTask)
+    {
+        try
+        {
+            return await outputTask.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            return string.Empty;
+        }
+    }
+
     private async Task<string> DownloadWithYoutubeExplodeAsync(
         Uri source,
         string workDir,
@@ -209,7 +227,7 @@ internal sealed class YoutubeThemeAudioDownloader(
         // practice a throttled/dead CDN response held the entire sequential sweep for that
         // full interval. Give the complete candidate a bounded budget and move on when it expires.
         using var candidateCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        candidateCts.CancelAfter(CandidateTimeout);
+        candidateCts.CancelAfter(YoutubeExplodeCandidateTimeout);
         using var youtubeHttp = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         using var youtube = new YoutubeClient(youtubeHttp);
 
@@ -223,7 +241,7 @@ internal sealed class YoutubeThemeAudioDownloader(
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"YouTube candidate exceeded the {CandidateTimeout.TotalSeconds:0}-second time limit.");
+                $"YouTube candidate exceeded the {YoutubeExplodeCandidateTimeout.TotalSeconds:0}-second time limit.");
         }
 
         var audio = manifest.GetAudioOnlyStreams().ToList();
@@ -270,7 +288,7 @@ internal sealed class YoutubeThemeAudioDownloader(
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             throw new TimeoutException(
-                $"YouTube candidate exceeded the {CandidateTimeout.TotalSeconds:0}-second time limit.");
+                $"YouTube candidate exceeded the {YoutubeExplodeCandidateTimeout.TotalSeconds:0}-second time limit.");
         }
 
         ValidateSourceFile(inputPath);

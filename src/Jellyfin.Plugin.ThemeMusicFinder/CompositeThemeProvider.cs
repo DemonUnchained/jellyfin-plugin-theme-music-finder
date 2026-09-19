@@ -11,7 +11,7 @@ public sealed class CompositeThemeProvider(params IThemeProvider[] providers) : 
     {
         var failures = new List<string>();
         var madeRequest = false;
-        var hadTransientFailure = false;
+        var hadRetryableFailure = false;
 
         foreach (var provider in providers)
         {
@@ -22,7 +22,7 @@ public sealed class CompositeThemeProvider(params IThemeProvider[] providers) : 
                     return result;
                 case ThemeFetchStatus.Transient:
                     madeRequest = true;
-                    hadTransientFailure = true;
+                    hadRetryableFailure = true;
                     failures.Add(result.Reason ?? "transient provider failure");
                     break;
                 case ThemeFetchStatus.NotFound:
@@ -31,6 +31,10 @@ public sealed class CompositeThemeProvider(params IThemeProvider[] providers) : 
                     break;
                 case ThemeFetchStatus.CandidateUnavailable:
                     madeRequest = true;
+                    // The catalogue found a candidate, but a deleted/restricted video or a
+                    // temporary media-CDN failure prevented its use. Later providers may still
+                    // win; if none does, this lookup is incomplete and must remain retryable.
+                    hadRetryableFailure = true;
                     failures.Add(result.Reason ?? "candidate unavailable");
                     break;
                 case ThemeFetchStatus.NotApplicable:
@@ -40,7 +44,7 @@ public sealed class CompositeThemeProvider(params IThemeProvider[] providers) : 
             }
         }
 
-        if (hadTransientFailure)
+        if (hadRetryableFailure)
         {
             return ThemeFetchResult.Transient(string.Join("; ", failures));
         }

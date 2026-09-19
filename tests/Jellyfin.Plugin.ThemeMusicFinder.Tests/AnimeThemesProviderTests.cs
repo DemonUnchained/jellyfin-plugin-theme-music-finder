@@ -88,6 +88,43 @@ public sealed class AnimeThemesProviderTests
     }
 
     [Fact]
+    public async Task NullSequenceDefaultsToOp1InsteadOfThrowing()
+    {
+        const string json = """
+            {"anime":[{"name":"Solo Leveling","year":2024,"animethemes":[{"type":"OP","sequence":null,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/SoloLeveling-OP1.ogg"}}]}]}]}]}
+            """;
+        var handler = new StubHandler(json, [1, 2, 3]);
+        var processor = new FakeThemeAudioProcessor((_, _) => Mp3());
+        var provider = new AnimeThemesProvider(new HttpClient(handler), processor);
+
+        var result = await provider.FetchAsync(
+            new Series { Name = "Solo Leveling", ProductionYear = 2024 },
+            CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.Found, result.Status);
+        Assert.Single(processor.Requested);
+    }
+
+    [Fact]
+    public async Task NullYearDoesNotMatchOrThrow()
+    {
+        const string json = """
+            {"anime":[{"name":"Solo Leveling","year":null,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[]}]}]}
+            """;
+        var handler = new StubHandler(json, [1, 2, 3]);
+        var processor = new FakeThemeAudioProcessor((_, _) => Mp3());
+        var provider = new AnimeThemesProvider(new HttpClient(handler), processor);
+
+        var result = await provider.FetchAsync(
+            new Series { Name = "Solo Leveling", ProductionYear = 2024 },
+            CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
+        Assert.Empty(processor.Requested);
+        Assert.Single(handler.Requested);
+    }
+
+    [Fact]
     public async Task FuzzyTitleDoesNotDownloadCandidate()
     {
         var handler = new StubHandler(ExactMatchJson, [1, 2, 3]);

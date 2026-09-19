@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.1.4
+
+- Gives `yt-dlp` up to three minutes to finish a curated audio candidate while
+  bounding its socket, media, fragment, and extractor retries. If it still
+  fails, YoutubeExplode now gets its independent fallback attempt and the log
+  retains `yt-dlp`'s final diagnostic line.
+- Keeps an unusable candidate retryable when later providers miss instead of
+  writing a false seven-day negative-cache entry.
+- Starts attempt-history generation v3 so false misses written by 1.2.1.3,
+  including *A Knight of the Seven Kingdoms*, are eligible immediately.
+- Handles nullable AnimeThemes `year` and `sequence` fields without throwing,
+  eliminating the per-series unexpected failures seen in the sweep log.
+
 ## 1.2.1.3
 
 - Changed the AnimeThemes API identification header to a Cloudflare-compatible

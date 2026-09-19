@@ -133,6 +133,7 @@ internal sealed class AnimeThemesProvider(HttpClient client, IThemeAudioProcesso
             if (!titles.Any(title => NormalizeTitle(title) == wanted)) continue;
             if (productionYear is int wantedYear
                 && (!anime.TryGetProperty("year", out var year)
+                    || year.ValueKind != JsonValueKind.Number
                     || !year.TryGetInt32(out var actualYear)
                     || actualYear != wantedYear)) continue;
 
@@ -144,6 +145,7 @@ internal sealed class AnimeThemesProvider(HttpClient client, IThemeAudioProcesso
                     ? typeProperty.GetString()
                     : null;
                 var sequence = theme.TryGetProperty("sequence", out var sequenceProperty)
+                    && sequenceProperty.ValueKind == JsonValueKind.Number
                     && sequenceProperty.TryGetInt32(out var value) ? value : 1;
                 if (!string.Equals(type, "OP", StringComparison.OrdinalIgnoreCase) || sequence != 1) continue;
                 if (!theme.TryGetProperty("animethemeentries", out var entries)
