@@ -31,6 +31,11 @@ public class ThemeDownloadService(
     /// the two trigger paths having to agree on it separately.</summary>
     private bool _writeFailureLogged;
 
+    /// <summary>Provider-wide outages can affect hundreds of series in one sweep. Keep every
+    /// outcome in the final counters, but emit one actionable warning per distinct reason and
+    /// send repetitions to Debug so Jellyfin's normal log is not buried.</summary>
+    private readonly HashSet<string> _loggedTransientReasons = new(StringComparer.Ordinal);
+
     public async Task<int> RunAsync(IProgress<double>? progress, CancellationToken ct)
     {
         await attempts.LoadAsync(ct).ConfigureAwait(false);
@@ -153,7 +158,12 @@ public class ThemeDownloadService(
         catch (HttpRequestException ex)
         {
             // Transient: do NOT record a failure, so it retries on the next run.
-            logger.LogWarning(ex, "Theme fetch failed for {Series}", series.Name);
+            LogTransientOnce(
+                series,
+                tvdbId,
+                tmdbId,
+                $"HTTP request failed: {ex.Message}",
+                ex);
             return Outcome.Transient;
         }
 
@@ -173,9 +183,7 @@ public class ThemeDownloadService(
         {
             // Deliberately NOT recorded. A bad hour upstream must not mark the whole library
             // themeless for the length of the backoff window.
-            logger.LogWarning(
-                "Theme lookup for {Series} (tvdb {Tvdb}, tmdb {Tmdb}) did not succeed: {Reason}. Not recording a failure; will retry on the next run.",
-                series.Name, tvdbId ?? "none", tmdbId ?? "none", fetch.Reason);
+            LogTransientOnce(series, tvdbId, tmdbId, fetch.Reason ?? "transient provider failure");
             return Outcome.Transient;
         }
 
@@ -221,5 +229,33 @@ public class ThemeDownloadService(
             tmdbId ?? "none",
             fetch.SourceUri?.ToString() ?? "not reported");
         return Outcome.Written;
+    }
+
+    private void LogTransientOnce(
+        Series series,
+        string? tvdbId,
+        string? tmdbId,
+        string reason,
+        Exception? exception = null)
+    {
+        if (_loggedTransientReasons.Add(reason))
+        {
+            logger.LogWarning(
+                exception,
+                "Theme lookup for {Series} (tvdb {Tvdb}, tmdb {Tmdb}) did not succeed: {Reason}. Not recording a failure; later providers were attempted and the series will retry on the next run. Further identical failures will only appear at Debug level this run.",
+                series.Name,
+                tvdbId ?? "none",
+                tmdbId ?? "none",
+                reason);
+            return;
+        }
+
+        logger.LogDebug(
+            exception,
+            "Repeated transient theme lookup failure for {Series} (tvdb {Tvdb}, tmdb {Tmdb}): {Reason}",
+            series.Name,
+            tvdbId ?? "none",
+            tmdbId ?? "none",
+            reason);
     }
 }

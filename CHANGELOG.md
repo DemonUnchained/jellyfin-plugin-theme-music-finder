@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.1.3
+
+- Changed the AnimeThemes API identification header to a Cloudflare-compatible
+  product user-agent, fixing the HTTP 403 response seen across the library.
+- Temporary failure at one provider now falls through to the remaining
+  independent providers. If none succeeds, the aggregate result stays transient
+  so an incomplete lookup is never negative-cached.
+- Reuses the existing Trailer Reel `yt-dlp` and configuration when present,
+  retaining YoutubeExplode as the standalone fallback. This fixes the curated
+  *A Knight of the Seven Kingdoms* ThemerrDB video timing out in YoutubeExplode.
+- Added a per-run AnimeThemes outage circuit breaker and warning deduplication so
+  one provider outage no longer creates hundreds of identical log warnings or
+  repeated requests.
+
 ## 1.2.1.2
 
 - Added `YoutubeExplode.dll` to the Jellyfin 12.1 local manifest assembly list,

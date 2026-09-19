@@ -40,7 +40,7 @@ public sealed class CompositeThemeProviderTests
     }
 
     [Fact]
-    public async Task PrimaryTransientFailureStopsTheChain()
+    public async Task PrimaryTransientFailureFallsThroughAndLaterSuccessWins()
     {
         var primary = new Provider(ThemeFetchResult.Transient("Plex 503"));
         var fallback = new Provider(ThemeFetchResult.Found([1, 2, 3]));
@@ -48,8 +48,23 @@ public sealed class CompositeThemeProviderTests
 
         var result = await chain.FetchAsync(Series(), CancellationToken.None);
 
+        Assert.Equal(ThemeFetchStatus.Found, result.Status);
+        Assert.Equal(1, fallback.Calls);
+    }
+
+    [Fact]
+    public async Task TransientFailureAndLaterMissRemainTransient()
+    {
+        var primary = new Provider(ThemeFetchResult.Transient("AnimeThemes 403"));
+        var fallback = new Provider(ThemeFetchResult.NotFound("Plex 404"));
+
+        var result = await new CompositeThemeProvider(primary, fallback)
+            .FetchAsync(Series(), CancellationToken.None);
+
         Assert.Equal(ThemeFetchStatus.Transient, result.Status);
-        Assert.Equal(0, fallback.Calls);
+        Assert.Contains("AnimeThemes 403", result.Reason);
+        Assert.Contains("Plex 404", result.Reason);
+        Assert.Equal(1, fallback.Calls);
     }
 
     [Fact]

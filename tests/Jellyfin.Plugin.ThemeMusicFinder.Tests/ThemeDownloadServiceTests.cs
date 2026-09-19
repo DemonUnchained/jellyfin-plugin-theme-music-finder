@@ -313,6 +313,20 @@ public sealed class ThemeDownloadServiceTests : IDisposable
         Assert.Empty(h.Log.AtLevel(LogLevel.Error));
     }
 
+    [Fact]
+    public async Task RepeatedIdenticalTransientsProduceOneWarningPerRun()
+    {
+        var series = Enumerable.Range(1, 3)
+            .Select(i => SeriesWithFolder($"Flaky{i}", i.ToString()))
+            .ToList();
+        var h = Build(series, _ => ThemeFetchResult.Transient("AnimeThemes returned HTTP 403"));
+
+        await h.Service.RunAsync(null, CancellationToken.None);
+
+        Assert.Single(h.Log.AtLevel(LogLevel.Warning));
+        Assert.Equal(2, h.Log.AtLevel(LogLevel.Debug).Count());
+    }
+
     /// <summary>Same reasoning one layer down: a socket-level failure never reaches the provider's
     /// classifier at all, so the service has to treat it as transient itself.</summary>
     [Fact]

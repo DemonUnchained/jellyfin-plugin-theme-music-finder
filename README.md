@@ -21,10 +21,15 @@ This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
   and generic web/YouTube search results are rejected.
 - Uses Plex by TVDB ID as the final fallback and rejects the known incorrect
   `Barber of Seville` mapping for *A Knight of the Seven Kingdoms*.
-- Downloads ThemerrDB's curated YouTube source with YoutubeExplode, uses a
-  60-second per-candidate limit, and converts it to a real MP3 using Jellyfin's
-  configured FFmpeg binary. A dead, blocked, streamless, or timed-out video falls
-  through to AnimeThemes and Plex.
+- Downloads ThemerrDB's curated YouTube source with the Trailer Reel `yt-dlp`
+  installation when it is available, with YoutubeExplode retained as a
+  self-contained fallback. Both paths use a 60-second per-candidate limit and
+  convert the result to a real MP3 with Jellyfin's configured FFmpeg binary. A
+  dead, blocked, streamless, or timed-out video falls through to AnimeThemes and
+  Plex.
+- Continues to later independent providers after a temporary provider failure;
+  if every fallback misses, the temporary result remains retryable and is not
+  added to the negative cache.
 - Saves the result as `<series folder>/theme.mp3`.
 - Normalizes new downloads to -18 LUFS integrated loudness and -1.5 dBTP true
   peak by default. The target and normalization toggle are configurable.
@@ -46,6 +51,8 @@ This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
   run.
 - Contains per-series error isolation, so one bad folder cannot stop the rest of
   a library scan.
+- Opens the AnimeThemes circuit after a provider-wide error and logs identical
+  transient failures only once per sweep instead of hundreds of times.
 - Logs a final sweep summary with downloaded, not-found, transient, unwritable,
   unexpected-error, skipped, and total-series counts.
 
@@ -67,7 +74,7 @@ exact title/year match only; generic title guessing is never used.
 2. Create this folder:
 
    ```text
-   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.2/
+   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.3/
    ```
 
 3. Extract `Jellyfin.Plugin.ThemeMusicFinder.dll`, `YoutubeExplode.dll`, and
@@ -108,7 +115,7 @@ dotnet test tests/Jellyfin.Plugin.ThemeMusicFinder.Tests/Jellyfin.Plugin.ThemeMu
 ./build.sh
 ```
 
-The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.2.zip`.
+The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.3.zip`.
 
 ## Source and license
 

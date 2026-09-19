@@ -13,7 +13,9 @@ internal sealed class AnimeThemesProvider(HttpClient client, IThemeAudioProcesso
     : IThemeProvider
 {
     private const string ApiRoot = "https://api.animethemes.moe/anime";
+    private const string UserAgent = "ThemeMusicFinder/1.2";
     private const long MaxResponseBytes = 50L * 1024 * 1024;
+    private string? _metadataOutageReason;
 
     public static HttpClient CreateClient()
     {
@@ -22,7 +24,10 @@ internal sealed class AnimeThemesProvider(HttpClient client, IThemeAudioProcesso
             Timeout = TimeSpan.FromSeconds(30),
             MaxResponseContentBufferSize = MaxResponseBytes
         };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd(PlexThemeProvider.UserAgent);
+        // AnimeThemes' Cloudflare rules reject the longer Plex-oriented user-agent even though
+        // the same API request is accepted with a conventional product/version identifier.
+        http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        http.DefaultRequestHeaders.Accept.ParseAdd("application/json");
         return http;
     }
 
@@ -31,6 +36,14 @@ internal sealed class AnimeThemesProvider(HttpClient client, IThemeAudioProcesso
         if (string.IsNullOrWhiteSpace(series.Name))
         {
             return ThemeFetchResult.NotApplicable("AnimeThemes lookup requires a series title");
+        }
+
+        // A 403, rate limit, or service error is provider-wide. Preserve the transient outcome
+        // for every affected series (so none is negative-cached), but do not hammer the same
+        // unavailable API hundreds of times during one sweep.
+        if (_metadataOutageReason is not null)
+        {
+            return ThemeFetchResult.Transient(_metadataOutageReason);
         }
 
         var query = Uri.EscapeDataString(series.Name);
@@ -44,10 +57,11 @@ internal sealed class AnimeThemesProvider(HttpClient client, IThemeAudioProcesso
 
         if (!response.IsSuccessStatusCode)
         {
-            return ThemeFetchResult.Transient(string.Format(
+            _metadataOutageReason = string.Format(
                 CultureInfo.InvariantCulture,
                 "AnimeThemes returned HTTP {0:D}",
-                response.StatusCode));
+                response.StatusCode);
+            return ThemeFetchResult.Transient(_metadataOutageReason);
         }
 
         Uri? audioUri;

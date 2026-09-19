@@ -7,6 +7,19 @@ namespace Jellyfin.Plugin.ThemeMusicFinder.Tests;
 
 public sealed class AnimeThemesProviderTests
 {
+    private sealed class StatusHandler(HttpStatusCode statusCode) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(new HttpResponseMessage(statusCode));
+        }
+    }
+
     private sealed class StubHandler(string metadataJson, byte[] audio) : HttpMessageHandler
     {
         public List<Uri> Requested { get; } = [];
@@ -86,6 +99,36 @@ public sealed class AnimeThemesProviderTests
 
         Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
         Assert.Empty(processor.Requested);
+    }
+
+    [Fact]
+    public void CreateClientUsesAnimeThemesCompatibleIdentification()
+    {
+        using var client = AnimeThemesProvider.CreateClient();
+
+        Assert.Equal("ThemeMusicFinder/1.2", client.DefaultRequestHeaders.UserAgent.ToString());
+        Assert.Contains(
+            client.DefaultRequestHeaders.Accept,
+            value => value.MediaType == "application/json");
+    }
+
+    [Fact]
+    public async Task ProviderWideHttpFailureTripsCircuitBreakerForTheRun()
+    {
+        var handler = new StatusHandler(HttpStatusCode.Forbidden);
+        var provider = new AnimeThemesProvider(
+            new HttpClient(handler),
+            new FakeThemeAudioProcessor((_, _) => Mp3()));
+
+        var first = await provider.FetchAsync(
+            new Series { Name = "First" }, CancellationToken.None);
+        var second = await provider.FetchAsync(
+            new Series { Name = "Second" }, CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.Transient, first.Status);
+        Assert.Equal(ThemeFetchStatus.Transient, second.Status);
+        Assert.Equal("AnimeThemes returned HTTP 403", second.Reason);
+        Assert.Equal(1, handler.Calls);
     }
 
     [Fact]

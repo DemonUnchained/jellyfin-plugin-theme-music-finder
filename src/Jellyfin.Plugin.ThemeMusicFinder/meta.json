@@ -1,14 +1,14 @@
 {
   "category": "Metadata",
-  "changelog": "Repairs Jellyfin 12.1 startup by declaring both the plugin and its YoutubeExplode dependency in the packaged local manifest.",
+  "changelog": "Fixes AnimeThemes HTTP 403 requests and provider fallthrough, reuses Trailer Reel's yt-dlp when available for curated YouTube themes, and suppresses repeated outage warnings.",
   "description": "Finds missing TV series themes through ThemerrDB, strictly matched AnimeThemes openings, and Plex, then saves normalized theme.mp3 files without overwriting existing themes.",
   "guid": "03459bac-6165-4b2d-b05f-40b953159b59",
   "name": "Theme Music Finder",
   "overview": "Finds missing TV series theme music and saves it as theme.mp3.",
   "owner": "DemonUnchained",
   "targetAbi": "12.1.0.0",
-  "timestamp": "2026-09-19T11:32:20Z",
-  "version": "1.2.1.2",
+  "timestamp": "2026-09-19T12:32:32Z",
+  "version": "1.2.1.3",
   "status": "Active",
   "autoUpdate": true,
   "assemblies": [
