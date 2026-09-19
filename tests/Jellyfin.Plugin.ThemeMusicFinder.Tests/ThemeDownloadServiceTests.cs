@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
@@ -59,6 +60,7 @@ public sealed class ThemeDownloadServiceTests : IDisposable
     private sealed class Harness
     {
         public required string AttemptsPath { get; init; }
+        public string? ReportPath { get; init; }
         public required AttemptStore Store { get; init; }
         public required FakeThemeProvider Provider { get; init; }
         public required FakeProviderManager Providers { get; init; }
@@ -71,7 +73,8 @@ public sealed class ThemeDownloadServiceTests : IDisposable
     private Harness Build(
         IEnumerable<Series> series,
         Func<string, ThemeFetchResult>? respond = null,
-        string? attemptsPath = null)
+        string? attemptsPath = null,
+        string? reportPath = null)
     {
         var attempts = attemptsPath ?? Path.Combine(
             Directory.CreateTempSubdirectory("themesongs-state-").FullName, "attempts.json");
@@ -85,6 +88,7 @@ public sealed class ThemeDownloadServiceTests : IDisposable
         return new Harness
         {
             AttemptsPath = attempts,
+            ReportPath = reportPath,
             Store = store,
             Provider = provider,
             Providers = providers,
@@ -92,7 +96,7 @@ public sealed class ThemeDownloadServiceTests : IDisposable
             Log = log,
             Delays = delays,
             Service = new ThemeDownloadService(
-                library, providers, provider, store, new FakeFileSystem(), log)
+                library, providers, provider, store, new FakeFileSystem(), log, reportPath)
             {
                 DelayAsync = delays.DelayAsync
             }
@@ -406,6 +410,97 @@ public sealed class ThemeDownloadServiceTests : IDisposable
         Assert.Contains("1 transient failure(s)", summary.Message);
         Assert.Contains("1 skipped", summary.Message);
         Assert.Contains("4 total series scanned", summary.Message);
+    }
+
+    [Fact]
+    public async Task FinalSummaryBreaksSkippedSeriesDownByReason()
+    {
+        var attempts = Path.Combine(
+            Directory.CreateTempSubdirectory("themesongs-state-").FullName, "attempts.json");
+        var seed = new AttemptStore(attempts);
+        seed.RecordFailure("2", DateTimeOffset.UtcNow);
+        await seed.SaveAsync(CancellationToken.None);
+
+        var existing = SeriesWithFolder("Existing", "1");
+        await File.WriteAllTextAsync(ThemePath(existing), "mine");
+        var backoff = SeriesWithFolder("Backoff", "2");
+        var noId = MakeSeries("NoId", Path.Combine(_root, "NoId"), tvdbId: null);
+        Directory.CreateDirectory(noId.Path);
+        var noPath = MakeSeries("NoPath", path: null, tvdbId: "3");
+        var notApplicable = SeriesWithFolder("NotApplicable", "4");
+
+        var h = Build(
+            [existing, backoff, noId, noPath, notApplicable],
+            _ => ThemeFetchResult.NotApplicable("disabled"),
+            attemptsPath: attempts);
+
+        await h.Service.RunAsync(null, CancellationToken.None);
+
+        var summary = Assert.Single(
+            h.Log.AtLevel(LogLevel.Information),
+            entry => entry.Message.StartsWith("Theme sweep complete:", StringComparison.Ordinal));
+        Assert.Contains("5 skipped", summary.Message);
+        Assert.Contains("1 existing theme", summary.Message);
+        Assert.Contains("1 in backoff", summary.Message);
+        Assert.Contains("1 no stable ID", summary.Message);
+        Assert.Contains("1 missing path", summary.Message);
+        Assert.Contains("1 provider not applicable", summary.Message);
+    }
+
+    [Fact]
+    public async Task MissingThemeReportListsEveryUnresolvedSeriesWithIdentifiersAndReason()
+    {
+        var state = Directory.CreateTempSubdirectory("themesongs-report-").FullName;
+        var attempts = Path.Combine(state, "attempts.json");
+        var report = Path.Combine(state, "missing.json");
+        var seed = new AttemptStore(attempts);
+        seed.RecordFailure("4", DateTimeOffset.UtcNow);
+        await seed.SaveAsync(CancellationToken.None);
+
+        var written = SeriesWithFolder("Written", "1");
+        var existing = SeriesWithFolder("Existing", "2");
+        await File.WriteAllTextAsync(ThemePath(existing), "mine");
+        var missing = SeriesWithFolder("Missing", "3");
+        missing.OriginalTitle = "Missing Original";
+        missing.ProductionYear = 2025;
+        missing.SetProviderId(MetadataProvider.Tmdb, "3003");
+        var backoff = SeriesWithFolder("Backoff", "4");
+        var noId = MakeSeries("NoId", Path.Combine(_root, "NoIdReport"), tvdbId: null);
+        Directory.CreateDirectory(noId.Path);
+
+        var h = Build(
+            [written, existing, missing, backoff, noId],
+            id => id == "1" ? ThemeFetchResult.Found(Mp3()) : ThemeFetchResult.NotFound("catalogues returned 404"),
+            attemptsPath: attempts,
+            reportPath: report);
+
+        await h.Service.RunAsync(null, CancellationToken.None);
+
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(report));
+        var root = document.RootElement;
+        Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(5, root.GetProperty("totalSeriesScanned").GetInt32());
+        var entries = root.GetProperty("entries").EnumerateArray().ToList();
+        Assert.Equal(3, entries.Count);
+        Assert.DoesNotContain(entries, entry => entry.GetProperty("title").GetString() == "Written");
+        Assert.DoesNotContain(entries, entry => entry.GetProperty("title").GetString() == "Existing");
+
+        var miss = Assert.Single(entries, entry => entry.GetProperty("title").GetString() == "Missing");
+        Assert.Equal("not-found", miss.GetProperty("status").GetString());
+        Assert.Equal("catalogues returned 404", miss.GetProperty("reason").GetString());
+        Assert.Equal("Missing Original", miss.GetProperty("originalTitle").GetString());
+        Assert.Equal(2025, miss.GetProperty("year").GetInt32());
+        Assert.Equal("3", miss.GetProperty("tvdbId").GetString());
+        Assert.Equal("3003", miss.GetProperty("tmdbId").GetString());
+        Assert.Equal(missing.Path, miss.GetProperty("path").GetString());
+
+        var deferred = Assert.Single(entries, entry => entry.GetProperty("title").GetString() == "Backoff");
+        Assert.Equal("backoff", deferred.GetProperty("status").GetString());
+        var unidentified = Assert.Single(entries, entry => entry.GetProperty("title").GetString() == "NoId");
+        Assert.Equal("no-stable-id", unidentified.GetProperty("status").GetString());
+        Assert.Contains(
+            h.Log.AtLevel(LogLevel.Information),
+            entry => entry.Message.Contains(report, StringComparison.Ordinal));
     }
 
     // ---- I6: backoff is honoured --------------------------------------------------------

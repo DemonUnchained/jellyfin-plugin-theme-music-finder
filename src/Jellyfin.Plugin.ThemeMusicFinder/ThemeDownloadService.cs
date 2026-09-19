@@ -15,15 +15,15 @@ public class ThemeDownloadService(
     IThemeProvider themeProvider,
     AttemptStore attempts,
     IFileSystem fileSystem,
-    ILogger<ThemeDownloadService> logger)
+    ILogger<ThemeDownloadService> logger,
+    string? reportPath = null)
 {
     private static readonly TimeSpan Throttle = TimeSpan.FromSeconds(1);
 
     /// <summary>The wait between upstream requests. Production leaves this as
     /// <see cref="Task.Delay(TimeSpan, CancellationToken)"/>; the tests substitute a recorder so
     /// they can assert the pacing — how many waits happen, how long each one is, and which
-    /// outcomes pay for one — without actually sleeping through 305 of them. The default is the
-    /// real delay, so nothing about the shipped behaviour depends on a test having set it.</summary>
+    /// outcomes pay for one — without actually sleeping through hundreds of them.</summary>
     internal Func<TimeSpan, CancellationToken, Task> DelayAsync { get; init; } = Task.Delay;
 
     /// <summary>One instance is constructed per run (nightly sweep or single item-added
@@ -53,6 +53,8 @@ public class ThemeDownloadService(
         var transient = 0;
         var unwritable = 0;
         var unexpected = 0;
+        var skipCounts = Enum.GetValues<SkipReason>().ToDictionary(reason => reason, _ => 0);
+        var reportEntries = new List<MissingThemeReportEntry>();
 
         try
         {
@@ -61,7 +63,7 @@ public class ThemeDownloadService(
                 ct.ThrowIfCancellationRequested();
                 progress?.Report(i * 100.0 / series.Count);
 
-                Outcome result;
+                ProcessResult result;
                 try
                 {
                     result = await TryOneAsync(series[i], ct).ConfigureAwait(false);
@@ -70,8 +72,7 @@ public class ThemeDownloadService(
                 {
                     // Real cancellation of THIS run must still stop the sweep. Without the
                     // filter, a TaskCanceledException from an HttpClient timeout (which derives
-                    // from OperationCanceledException) would be misclassified as cancellation
-                    // and abort the run instead of falling through to the catch below.
+                    // from OperationCanceledException) would be misclassified as cancellation.
                     throw;
                 }
                 catch (Exception ex)
@@ -80,20 +81,37 @@ public class ThemeDownloadService(
                     // or an HttpClient timeout) must not take down the rest of the sweep.
                     logger.LogWarning(ex, "Unexpected error processing {Series}", series[i].Name);
                     unexpected++;
+                    reportEntries.Add(CreateReportEntry(
+                        series[i],
+                        "unexpected-error",
+                        ex.Message));
                     continue;
                 }
 
-                switch (result)
+                switch (result.Outcome)
                 {
-                    case Outcome.Skipped: skipped++; break;
+                    case Outcome.Skipped:
+                        skipped++;
+                        skipCounts[result.SkipReason
+                            ?? throw new InvalidOperationException("A skipped result must name its reason.")]++;
+                        break;
                     case Outcome.Written: written++; break;
                     case Outcome.NotFound: notFound++; break;
                     case Outcome.Transient: transient++; break;
                     case Outcome.Unwritable: unwritable++; break;
-                    default: throw new InvalidOperationException($"Unknown theme outcome {result}.");
+                    default: throw new InvalidOperationException($"Unknown theme outcome {result.Outcome}.");
                 }
 
-                if (i < series.Count - 1 && result != Outcome.Skipped) await DelayAsync(Throttle, ct).ConfigureAwait(false);
+                if (ShouldReport(result))
+                {
+                    reportEntries.Add(CreateReportEntry(
+                        series[i],
+                        GetReportStatus(result),
+                        result.Reason ?? GetDefaultReason(result)));
+                }
+
+                if (i < series.Count - 1 && result.Outcome != Outcome.Skipped)
+                    await DelayAsync(Throttle, ct).ConfigureAwait(false);
             }
         }
         finally
@@ -101,8 +119,7 @@ public class ThemeDownloadService(
             // Save even if the run was cancelled or a series threw past the catch above,
             // so recorded failures aren't lost and the backoff is honoured next run.
             // Use CancellationToken.None: if ct is already cancelled, the save must still succeed.
-            // Guarded because an exception out of a finally block *replaces* whatever was
-            // propagating — a disk-full here would masquerade as the cause of a clean shutdown.
+            // Guarded because an exception out of a finally block replaces the original fault.
             try
             {
                 await attempts.SaveAsync(CancellationToken.None).ConfigureAwait(false);
@@ -113,42 +130,94 @@ public class ThemeDownloadService(
             }
         }
 
+        if (reportPath is not null)
+        {
+            try
+            {
+                await MissingThemeReport.WriteAtomicAsync(
+                    reportPath,
+                    new MissingThemeReport
+                    {
+                        GeneratedAtUtc = DateTimeOffset.UtcNow,
+                        TotalSeriesScanned = series.Count,
+                        Entries = reportEntries
+                    },
+                    ct).ConfigureAwait(false);
+                logger.LogInformation(
+                    "Wrote missing-theme report with {Count} unresolved series to {Path}.",
+                    reportEntries.Count,
+                    reportPath);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Could not write the missing-theme report to {Path}.", reportPath);
+            }
+        }
+
         progress?.Report(100);
         logger.LogInformation(
-            "Theme sweep complete: {Written} written, {NotFound} not found, {Transient} transient failure(s), {Unwritable} write failure(s), {Unexpected} unexpected error(s), {Skipped} skipped; {Scanned} total series scanned.",
-            written, notFound, transient, unwritable, unexpected, skipped, series.Count);
+            "Theme sweep complete: {Written} written, {NotFound} not found, {Transient} transient failure(s), {Unwritable} write failure(s), {Unexpected} unexpected error(s), {Skipped} skipped ({ExistingTheme} existing theme, {Backoff} in backoff, {NoStableId} no stable ID, {MissingPath} missing path, {NotApplicable} provider not applicable); {Scanned} total series scanned.",
+            written,
+            notFound,
+            transient,
+            unwritable,
+            unexpected,
+            skipped,
+            skipCounts[SkipReason.ExistingTheme],
+            skipCounts[SkipReason.Backoff],
+            skipCounts[SkipReason.NoStableId],
+            skipCounts[SkipReason.MissingPath],
+            skipCounts[SkipReason.ProviderNotApplicable],
+            series.Count);
         return written;
     }
 
     /// <summary>Runs a single series through the same fetch/write/refresh pipeline as the nightly
-    /// sweep. Returns the full outcome rather than a bool: callers need
-    /// <c>!= <see cref="Outcome.Skipped"/></c> to decide whether to pay the upstream throttle
-    /// (a series that was skipped - no catalogue id, theme already present, inside the backoff
-    /// window - made no request and must not pay one), but they also need to be able to see
-    /// <see cref="Outcome.Unwritable"/>, which collapsing to a bool discards entirely.</summary>
+    /// sweep. Returns the full outcome rather than a bool so the item-added path can distinguish
+    /// an upstream request from a local skip and can surface an unwritable library.</summary>
     public async Task<Outcome> RunForSeriesAsync(Series series, CancellationToken ct)
-        => await TryOneAsync(series, ct).ConfigureAwait(false);
+        => (await TryOneAsync(series, ct).ConfigureAwait(false)).Outcome;
 
     public enum Outcome { Skipped, Written, NotFound, Transient, Unwritable }
 
-    private async Task<Outcome> TryOneAsync(Series series, CancellationToken ct)
+    private enum SkipReason { ExistingTheme, Backoff, NoStableId, MissingPath, ProviderNotApplicable }
+
+    private sealed record ProcessResult(
+        Outcome Outcome,
+        SkipReason? SkipReason = null,
+        string? Reason = null);
+
+    private async Task<ProcessResult> TryOneAsync(Series series, CancellationToken ct)
     {
         var tvdbId = series.GetProviderId(MetadataProvider.Tvdb);
         var tmdbId = series.GetProviderId(MetadataProvider.Tmdb);
         // No stable catalogue id is normal (e.g. YouTube channel "series") — not an error.
-        if ((string.IsNullOrEmpty(tvdbId) && string.IsNullOrEmpty(tmdbId))
-            || string.IsNullOrEmpty(series.Path)) return Outcome.Skipped;
+        if (string.IsNullOrEmpty(tvdbId) && string.IsNullOrEmpty(tmdbId))
+            return new ProcessResult(Outcome.Skipped, SkipReason.NoStableId);
+        if (string.IsNullOrEmpty(series.Path))
+            return new ProcessResult(Outcome.Skipped, SkipReason.MissingPath);
 
         var dest = Path.Combine(series.Path, "theme.mp3");
-        if (File.Exists(dest)) return Outcome.Skipped;
+        if (File.Exists(dest))
+            return new ProcessResult(Outcome.Skipped, SkipReason.ExistingTheme);
 
         var config = ThemeMusicFinderPlugin.Instance?.Configuration ?? new PluginConfiguration();
         // Belt and braces alongside the clamp in PluginConfiguration: a 0 here disables backoff.
         var retryAfterDays = Math.Max(1, config.RetryAfterDays);
-        // Preserve existing TVDB-based history after upgrading. TMDB-only series get a
-        // namespaced key so identifiers from the two catalogues can never collide.
+        // TVDB-based history remains unnamespaced. TMDB-only series use a namespaced key so
+        // identifiers from the two catalogues can never collide.
         var attemptKey = !string.IsNullOrEmpty(tvdbId) ? tvdbId : $"tmdb:{tmdbId}";
-        if (!attempts.ShouldTry(attemptKey, retryAfterDays, DateTimeOffset.UtcNow)) return Outcome.Skipped;
+        if (!attempts.ShouldTry(attemptKey, retryAfterDays, DateTimeOffset.UtcNow))
+        {
+            return new ProcessResult(
+                Outcome.Skipped,
+                SkipReason.Backoff,
+                $"A confirmed miss is inside the {retryAfterDays}-day retry window.");
+        }
 
         ThemeFetchResult fetch;
         try
@@ -158,13 +227,9 @@ public class ThemeDownloadService(
         catch (HttpRequestException ex)
         {
             // Transient: do NOT record a failure, so it retries on the next run.
-            LogTransientOnce(
-                series,
-                tvdbId,
-                tmdbId,
-                $"HTTP request failed: {ex.Message}",
-                ex);
-            return Outcome.Transient;
+            var reason = $"HTTP request failed: {ex.Message}";
+            LogTransientOnce(series, tvdbId, tmdbId, reason, ex);
+            return new ProcessResult(Outcome.Transient, Reason: reason);
         }
 
         if (fetch.Status == ThemeFetchStatus.NotFound)
@@ -176,22 +241,24 @@ public class ThemeDownloadService(
             logger.LogInformation(
                 "No theme available for {Series} (tvdb {Tvdb}, tmdb {Tmdb}): {Reason}. Will not ask again for {Days} day(s).",
                 series.Name, tvdbId ?? "none", tmdbId ?? "none", fetch.Reason, retryAfterDays);
-            return Outcome.NotFound;
+            return new ProcessResult(Outcome.NotFound, Reason: fetch.Reason);
         }
 
         if (fetch.Status is ThemeFetchStatus.Transient or ThemeFetchStatus.CandidateUnavailable)
         {
             // Deliberately NOT recorded. A bad hour upstream must not mark the whole library
-            // themeless for the length of the backoff window. CandidateUnavailable is normally
-            // collapsed to Transient by CompositeThemeProvider, but handling it here keeps a
-            // direct provider from accidentally earning backoff.
-            LogTransientOnce(series, tvdbId, tmdbId, fetch.Reason ?? "transient provider failure");
-            return Outcome.Transient;
+            // themeless for the length of the backoff window.
+            var reason = fetch.Reason ?? "transient provider failure";
+            LogTransientOnce(series, tvdbId, tmdbId, reason);
+            return new ProcessResult(Outcome.Transient, Reason: reason);
         }
 
         if (fetch.Status == ThemeFetchStatus.NotApplicable)
         {
-            return Outcome.Skipped;
+            return new ProcessResult(
+                Outcome.Skipped,
+                SkipReason.ProviderNotApplicable,
+                fetch.Reason);
         }
 
         var body = fetch.Body!;
@@ -204,9 +271,7 @@ public class ThemeDownloadService(
         {
             if (!_writeFailureLogged)
             {
-                // Once per run, not per item: 305 identical errors buries the one that matters.
-                // The exception and the path are the whole point - "library is not writable" is
-                // actively misleading for a full disk or a refused overwrite.
+                // Once per run, not per item: hundreds of identical errors bury the useful one.
                 _writeFailureLogged = true;
                 logger.LogError(
                     ex,
@@ -214,7 +279,7 @@ public class ThemeDownloadService(
                     series.Name, dest);
             }
 
-            return Outcome.Unwritable;
+            return new ProcessResult(Outcome.Unwritable, Reason: ex.Message);
         }
 
         // Jellyfin does not expose ThemeMedia until the item is refreshed — verified.
@@ -230,8 +295,55 @@ public class ThemeDownloadService(
             tvdbId ?? "none",
             tmdbId ?? "none",
             fetch.SourceUri?.ToString() ?? "not reported");
-        return Outcome.Written;
+        return new ProcessResult(Outcome.Written);
     }
+
+    private static bool ShouldReport(ProcessResult result)
+        => result.Outcome is not Outcome.Written
+            && result.SkipReason is not SkipReason.ExistingTheme;
+
+    private static string GetReportStatus(ProcessResult result)
+        => result.Outcome switch
+        {
+            Outcome.NotFound => "not-found",
+            Outcome.Transient => "transient",
+            Outcome.Unwritable => "unwritable",
+            Outcome.Skipped when result.SkipReason == SkipReason.Backoff => "backoff",
+            Outcome.Skipped when result.SkipReason == SkipReason.NoStableId => "no-stable-id",
+            Outcome.Skipped when result.SkipReason == SkipReason.MissingPath => "missing-path",
+            Outcome.Skipped when result.SkipReason == SkipReason.ProviderNotApplicable => "not-applicable",
+            _ => throw new InvalidOperationException($"Outcome {result.Outcome} is not reportable.")
+        };
+
+    private static string GetDefaultReason(ProcessResult result)
+        => result.SkipReason switch
+        {
+            SkipReason.Backoff => "A confirmed miss is still inside the retry window.",
+            SkipReason.NoStableId => "The series has neither a TVDB nor a TMDB identifier.",
+            SkipReason.MissingPath => "The series has no physical folder path.",
+            SkipReason.ProviderNotApplicable => "No enabled provider could look up this series.",
+            _ => result.Outcome switch
+            {
+                Outcome.NotFound => "No provider found a theme.",
+                Outcome.Transient => "The lookup failed temporarily and will retry.",
+                Outcome.Unwritable => "The theme could not be written to the series folder.",
+                _ => "Unresolved."
+            }
+        };
+
+    private static MissingThemeReportEntry CreateReportEntry(
+        Series series,
+        string status,
+        string reason)
+        => new(
+            series.Name,
+            string.IsNullOrWhiteSpace(series.OriginalTitle) ? null : series.OriginalTitle,
+            series.ProductionYear,
+            series.GetProviderId(MetadataProvider.Tvdb),
+            series.GetProviderId(MetadataProvider.Tmdb),
+            string.IsNullOrWhiteSpace(series.Path) ? null : series.Path,
+            status,
+            reason);
 
     private void LogTransientOnce(
         Series series,

@@ -1,14 +1,14 @@
 {
   "category": "Metadata",
-  "changelog": "Allows bounded three-minute yt-dlp downloads, keeps unusable candidates retryable, clears the affected negative cache, and accepts nullable AnimeThemes metadata.",
-  "description": "Finds missing TV series themes through ThemerrDB, strictly matched AnimeThemes openings, and Plex, then saves normalized theme.mp3 files without overwriting existing themes.",
+  "changelog": "Fixes AnimeThemes synonym and year matching, adds safe ED1 fallback and original-title lookup, refreshes the negative cache, and writes an actionable missing-theme report.",
+  "description": "Finds missing TV series themes through ThemerrDB, strictly matched AnimeThemes openings or safe endings, and Plex, then saves normalized theme.mp3 files without overwriting existing themes.",
   "guid": "03459bac-6165-4b2d-b05f-40b953159b59",
   "name": "Theme Music Finder",
   "overview": "Finds missing TV series theme music and saves it as theme.mp3.",
   "owner": "DemonUnchained",
   "targetAbi": "12.1.0.0",
-  "timestamp": "2026-09-19T14:41:39Z",
-  "version": "1.2.1.4",
+  "timestamp": "2026-09-19T16:05:05Z",
+  "version": "1.2.1.5",
   "status": "Active",
   "autoUpdate": true,
   "assemblies": [

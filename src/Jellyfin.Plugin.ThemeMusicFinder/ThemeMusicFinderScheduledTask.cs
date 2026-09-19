@@ -18,7 +18,7 @@ public class ThemeMusicFinderScheduledTask(
 {
     public string Name => "Find missing theme music";
     public string Key => "ThemeMusicFinderDownload";
-    public string Description => "Finds missing TV series themes through ThemerrDB, AnimeThemes, and Plex, then saves normalized theme.mp3 files.";
+    public string Description => "Finds missing TV series themes through ThemerrDB, AnimeThemes, and Plex, then saves normalized theme.mp3 files and an unresolved-series report.";
     public string Category => "Theme Music Finder";
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
@@ -55,13 +55,14 @@ public class ThemeMusicFinderScheduledTask(
             IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
             var store = new AttemptStore(
-                // v3 intentionally starts fresh: v1.2.1.3 incorrectly stored an unusable
-                // YouTube candidate as a confirmed miss, suppressing a retry for seven days.
-                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v3.json"),
+                // v4 intentionally starts fresh: v1.2.1.4 could not read the live AnimeThemes
+                // synonym field, so many catalogue matches were stored as confirmed misses.
+                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v4.json"),
                 loggerFactory.CreateLogger<AttemptStore>());
             var service = new ThemeDownloadService(
                 libraryManager, providerManager, provider, store, fileSystem,
-                loggerFactory.CreateLogger<ThemeDownloadService>());
+                loggerFactory.CreateLogger<ThemeDownloadService>(),
+                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.missing-themes.json"));
 
             var written = await service.RunAsync(progress, cancellationToken).ConfigureAwait(false);
             loggerFactory.CreateLogger<ThemeMusicFinderScheduledTask>()

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.1.5
+
+- Reads AnimeThemes' live `animesynonyms` field, checks Jellyfin's original title,
+  and strips a trailing `(YYYY)` only when it matches the series production year.
+- Filters AnimeThemes searches by production year while retaining local exact
+  title and year validation, preventing buried exact matches and wrong-year picks.
+- Prefers a non-NSFW, non-spoiler OP1 and falls back to a similarly safe ED1 only
+  when no usable OP1 exists.
+- Starts attempt-history generation v4 so false misses cached by 1.2.1.4 are
+  immediately eligible for the corrected matcher.
+- Splits skipped-series diagnostics by cause and writes a complete
+  `ThemeMusicFinder.missing-themes.json` report with titles, years, catalogue IDs,
+  paths, statuses, and reasons after every completed full sweep.
+
 ## 1.2.1.4
 
 - Gives `yt-dlp` up to three minutes to finish a curated audio candidate while

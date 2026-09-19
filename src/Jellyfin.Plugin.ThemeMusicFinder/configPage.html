@@ -4,7 +4,8 @@
         Saves themes as <code>theme.mp3</code> in each series folder, so Jellyfin needs
         <strong>write access</strong> to your TV library. The plugin searches the public
         ThemerrDB catalog using each series&rsquo; TMDB identifier, then strictly matched
-        AnimeThemes openings, then Plex TV Themes by TVDB identifier. Curated source
+        AnimeThemes openings (or a safe first ending when no opening is available), then
+        Plex TV Themes by TVDB identifier. Curated source
         audio is converted to MP3 with Jellyfin&rsquo;s FFmpeg.
         An existing <code>theme.mp3</code> is never overwritten.
     </p>
@@ -24,7 +25,7 @@
       </label>
       <label class="checkboxContainer">
         <input is="emby-checkbox" type="checkbox" id="EnableAnimeThemes" />
-        <span>Use AnimeThemes for strictly matched anime openings</span>
+        <span>Use AnimeThemes for strictly matched anime themes</span>
       </label>
       <label class="checkboxContainer">
         <input is="emby-checkbox" type="checkbox" id="EnableLoudnessNormalization" />
@@ -50,7 +51,7 @@
           <li>Skip if a <code>theme.mp3</code> is already there.</li>
           <li>Read its TVDB and TMDB IDs from Jellyfin metadata.</li>
           <li>Skip if it failed recently (see the retry interval).</li>
-          <li>Try ThemerrDB by TMDB ID, then an exact title/year AnimeThemes match, then Plex by TVDB ID.</li>
+          <li>Try ThemerrDB by TMDB ID, then an exact title/original-title/synonym and year AnimeThemes match, then Plex by TVDB ID.</li>
           <li>Download, throttled to about one series per second.</li>
           <li>Normalize new downloads to the configured loudness target.</li>
           <li>Validate it is a real MP3 &mdash; a missing theme returns an error page, not a 404.</li>
@@ -61,6 +62,11 @@
           A theme that genuinely does not exist is retried on your interval below. Temporary
           failures &mdash; timeouts, server errors &mdash; are not recorded, so a bad hour
           upstream does not stall your whole library.
+        </p>
+        <p class="fieldDescription">
+          Every completed full sweep also writes <code>ThemeMusicFinder.missing-themes.json</code>
+          in Jellyfin&rsquo;s plugin configuration folder. It lists unresolved series, IDs,
+          paths, and exact reasons so remaining gaps can be corrected or contributed upstream.
         </p>
         <p class="fieldDescription">
           Files land at <code>&lt;series folder&gt;/theme.mp3</code>. Playback is a

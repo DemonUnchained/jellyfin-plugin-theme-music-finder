@@ -3,9 +3,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.2.1.4</Version>
-    <AssemblyVersion>1.2.1.4</AssemblyVersion>
-    <FileVersion>1.2.1.4</FileVersion>
+    <Version>1.2.1.5</Version>
+    <AssemblyVersion>1.2.1.5</AssemblyVersion>
+    <FileVersion>1.2.1.5</FileVersion>
     <Authors>Theme Music Finder contributors</Authors>
     <Copyright>Copyright (c) 2026 Theme Music Finder contributors</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

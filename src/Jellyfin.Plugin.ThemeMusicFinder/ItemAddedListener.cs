@@ -81,7 +81,7 @@ public class ItemAddedListener(
                 IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
                 var store = new AttemptStore(
-                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v3.json"),
+                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v4.json"),
                     loggerFactory.CreateLogger<AttemptStore>());
                 await store.LoadAsync(ct).ConfigureAwait(false);
 

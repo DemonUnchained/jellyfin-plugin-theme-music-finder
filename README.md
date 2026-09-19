@@ -1,8 +1,9 @@
 # Theme Music Finder for Jellyfin 12
 
 Theme Music Finder scans Jellyfin TV series, looks up missing themes in ThemerrDB,
-strictly matched AnimeThemes openings, and finally Plex TV Themes. It converts and
-normalizes new downloads with Jellyfin's FFmpeg, then writes a validated
+strictly matched AnimeThemes openings (or a safe first ending when no opening is
+available), and finally Plex TV Themes. It converts and normalizes new downloads
+with Jellyfin's FFmpeg, then writes a validated
 `theme.mp3` into the series folder.
 
 This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
@@ -16,9 +17,11 @@ This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
   virtual placeholder items.
 - Queries ThemerrDB first by the TMDB identifier already stored in Jellyfin.
 - After a confirmed miss or an unusable curated YouTube video, optionally queries
-  AnimeThemes. It accepts only an
-  exact title/synonym and year match with a safe OP1 audio file; fuzzy matches
-  and generic web/YouTube search results are rejected.
+  AnimeThemes. It accepts only an exact Jellyfin title, original title, or catalogue
+  synonym plus year match. It prefers a safe OP1 audio file and uses a safe ED1 only
+  when no OP1 exists; fuzzy matches and generic web/YouTube search results are rejected.
+- Sends the production year as an AnimeThemes API filter, which avoids irrelevant
+  search results and still validates the returned year locally before downloading.
 - Uses Plex by TVDB ID as the final fallback and rejects the known incorrect
   `Barber of Seville` mapping for *A Knight of the Seven Kingdoms*.
 - Downloads ThemerrDB's curated YouTube source with the Trailer Reel `yt-dlp`
@@ -55,12 +58,17 @@ This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
 - Opens the AnimeThemes circuit after a provider-wide error and logs identical
   transient failures only once per sweep instead of hundreds of times.
 - Logs a final sweep summary with downloaded, not-found, transient, unwritable,
-  unexpected-error, skipped, and total-series counts.
+  unexpected-error, and total-series counts. Skips are split into existing theme,
+  retry backoff, missing ID, missing path, and provider-not-applicable counts.
+- Writes `ThemeMusicFinder.missing-themes.json` after every completed full sweep.
+  The report records every unresolved title, original title, year, TVDB/TMDB IDs,
+  folder, status, and reason, including series currently inside retry backoff.
 
 The catalogues are free and have no service guarantee. Coverage is good for many
 established TV series but incomplete for new, obscure, and some anime titles.
 Series need a TVDB ID for Plex or a TMDB ID for ThemerrDB. AnimeThemes uses an
-exact title/year match only; generic title guessing is never used.
+exact title/original-title/synonym and year match only; generic title guessing is
+never used.
 
 ## Requirements
 
@@ -75,7 +83,7 @@ exact title/year match only; generic title guessing is never used.
 2. Create this folder:
 
    ```text
-   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.4/
+   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.5/
    ```
 
 3. Extract `Jellyfin.Plugin.ThemeMusicFinder.dll`, `YoutubeExplode.dll`, and
@@ -88,6 +96,10 @@ exact title/year match only; generic title guessing is never used.
    immediate checking, and normalization are enabled by default.
 6. For the first sweep, open **Dashboard → Scheduled Tasks → Find missing theme
    music** and select **Run**.
+
+If another disk-heavy task such as trickplay generation also runs at 3:00 AM,
+move one task to a different time in Jellyfin's Scheduled Tasks page. This avoids
+avoidable storage contention; it does not change matching results.
 
 Do not replace a plugin DLL while Jellyfin is running. The assembly is loaded by
 the server process and may be corrupted if overwritten in place.
@@ -105,6 +117,23 @@ To hear them, enable **Play theme songs** in the playback settings of the
 Jellyfin client you use. Theme playback is a client feature, so client support
 can vary.
 
+## Resolve remaining misses
+
+Open `ThemeMusicFinder.missing-themes.json` in Jellyfin's plugin configuration
+folder after a full sweep. The Jellyfin log prints its exact path. For each entry:
+
+1. Correct a wrong or missing title, year, TVDB ID, or TMDB ID in Jellyfin, then
+   run the task again.
+2. Add a hand-picked `theme.mp3` directly to the reported series folder. The
+   plugin treats that file as authoritative and never overwrites it.
+3. Contribute an approved YouTube mapping to
+   [ThemerrDB](https://github.com/LizardByte/ThemerrDB#contributing), or contribute
+   missing anime/theme metadata to [AnimeThemes](https://github.com/AnimeThemes).
+
+Confirmed misses use the configured retry window. Version 1.2.1.5 starts a fresh
+attempt-history generation so false misses recorded by 1.2.1.4 are immediately
+eligible for the corrected AnimeThemes matcher.
+
 ## Build and test
 
 Install the .NET 10 SDK, then run:
@@ -116,7 +145,7 @@ dotnet test tests/Jellyfin.Plugin.ThemeMusicFinder.Tests/Jellyfin.Plugin.ThemeMu
 ./build.sh
 ```
 
-The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.4.zip`.
+The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.5.zip`.
 
 ## Source and license
 
