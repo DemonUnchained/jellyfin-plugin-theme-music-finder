@@ -26,38 +26,36 @@ internal sealed class AnimeThemeTitleOverrideStore(
             if (!File.Exists(path))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                var tmpPath = path + ".tmp";
-                try
-                {
-                    await using (var stream = File.Create(tmpPath))
-                    {
-                        await JsonSerializer.SerializeAsync(
-                            stream,
-                            AnimeThemesProvider.DefaultTitleOverrides,
-                            JsonOptions,
-                            ct).ConfigureAwait(false);
-                    }
-
-                    File.Move(tmpPath, path, overwrite: false);
-                }
-                finally
-                {
-                    if (File.Exists(tmpPath)) File.Delete(tmpPath);
-                }
+                await WriteAtomicAsync(
+                    path,
+                    AnimeThemesProvider.DefaultTitleOverrides,
+                    overwrite: false,
+                    ct).ConfigureAwait(false);
 
                 logger.LogInformation(
                     "Created AnimeThemes title-override file at {Path}.",
                     path);
             }
 
-            await using var input = File.OpenRead(path);
-            var loaded = await JsonSerializer.DeserializeAsync<Dictionary<string, string[]>>(
-                input,
-                JsonOptions,
-                ct).ConfigureAwait(false) ?? [];
+            Dictionary<string, string[]> loaded;
+            await using (var input = File.OpenRead(path))
+            {
+                loaded = await JsonSerializer.DeserializeAsync<Dictionary<string, string[]>>(
+                    input,
+                    JsonOptions,
+                    ct).ConfigureAwait(false) ?? [];
+            }
+
             var validated = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            var revokedKeys = new List<string>();
             foreach (var (key, values) in loaded)
             {
+                if (AnimeThemesProvider.IsRevokedOverrideKey(key))
+                {
+                    revokedKeys.Add(key);
+                    continue;
+                }
+
                 if (!IsValidKey(key) || values is null) continue;
                 var aliases = values
                     .Where(value => !string.IsNullOrWhiteSpace(value) && value.Trim().Length <= 200)
@@ -66,6 +64,31 @@ internal sealed class AnimeThemeTitleOverrideStore(
                     .Take(10)
                     .ToArray();
                 if (aliases.Length > 0) validated[key.Trim()] = aliases;
+            }
+
+            if (revokedKeys.Count > 0)
+            {
+                // v1.2.1.6 wrote a live-action ID -> anime alias into new files. Ignore it in
+                // memory even if this cleanup write fails; AnimeThemesProvider independently
+                // refuses the revoked IDs as a second line of defence. Remove only those exact
+                // entries on disk: unrelated invalid/user-in-progress entries remain untouched.
+                try
+                {
+                    foreach (var key in revokedKeys) loaded.Remove(key);
+                    await WriteAtomicAsync(path, loaded, overwrite: true, ct).ConfigureAwait(false);
+                    logger.LogWarning(
+                        "Removed {Count} revoked live-action AnimeThemes override(s) from {Path}.",
+                        revokedKeys.Count,
+                        path);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "Could not rewrite {Path} after ignoring {Count} revoked live-action AnimeThemes override(s); the unsafe mappings remain disabled in memory.",
+                        path,
+                        revokedKeys.Count);
+                }
             }
 
             logger.LogInformation(
@@ -99,5 +122,31 @@ internal sealed class AnimeThemeTitleOverrideStore(
                 || provider.Equals("tmdb", StringComparison.OrdinalIgnoreCase))
             && long.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var numericId)
             && numericId > 0;
+    }
+
+    private static async Task WriteAtomicAsync(
+        string path,
+        IReadOnlyDictionary<string, string[]> mappings,
+        bool overwrite,
+        CancellationToken ct)
+    {
+        var tmpPath = path + ".tmp";
+        try
+        {
+            await using (var stream = File.Create(tmpPath))
+            {
+                await JsonSerializer.SerializeAsync(
+                    stream,
+                    mappings,
+                    JsonOptions,
+                    ct).ConfigureAwait(false);
+            }
+
+            File.Move(tmpPath, path, overwrite);
+        }
+        finally
+        {
+            if (File.Exists(tmpPath)) File.Delete(tmpPath);
+        }
     }
 }

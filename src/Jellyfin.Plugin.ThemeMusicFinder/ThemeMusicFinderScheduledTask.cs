@@ -19,7 +19,7 @@ public class ThemeMusicFinderScheduledTask(
 {
     public string Name => "Find missing theme music";
     public string Key => "ThemeMusicFinderDownload";
-    public string Description => "Finds missing TV series themes through ThemerrDB, AnimeThemes, and Plex, then saves normalized theme.mp3 files and an unresolved-series report.";
+    public string Description => "Finds missing TV series themes through curated stable-ID overrides, ThemerrDB, AnimeThemes, and Plex, then saves normalized theme.mp3 files and an unresolved-series report.";
     public string Category => "Theme Music Finder";
 
     public async Task ExecuteAsync(IProgress<double> progress, CancellationToken cancellationToken)
@@ -40,6 +40,16 @@ public class ThemeMusicFinderScheduledTask(
                 mediaEncoder,
                 config.EnableLoudnessNormalization,
                 config.NormalizationTargetLufs);
+            var youtubeDownloader = new YoutubeThemeAudioDownloader(
+                appPaths,
+                mediaEncoder,
+                audioProcessor);
+            var sourceOverrides = await CuratedThemeSourceStore.LoadOrCreateAsync(
+                Path.Combine(
+                    appPaths.PluginConfigurationsPath,
+                    "ThemeMusicFinder.source-overrides.json"),
+                taskLogger,
+                cancellationToken).ConfigureAwait(false);
 
             var providers = new List<IThemeProvider>();
             var measuredProviders = new List<MeasuredThemeProvider>();
@@ -54,11 +64,18 @@ public class ThemeMusicFinderScheduledTask(
                 providers.Add(measured);
             }
 
+            if (sourceOverrides.Mappings.Count > 0)
+            {
+                AddProvider(
+                    "Curated source overrides",
+                    new CuratedThemeSourceProvider(sourceOverrides, youtubeDownloader));
+            }
+
             if (config.EnableThemerrFallback)
             {
                 AddProvider("ThemerrDB", new ThemerrThemeProvider(
                     themerrHttp,
-                    new YoutubeThemeAudioDownloader(appPaths, mediaEncoder, audioProcessor)));
+                    youtubeDownloader));
             }
 
             if (config.EnableAnimeThemes)
@@ -83,22 +100,32 @@ public class ThemeMusicFinderScheduledTask(
             IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
             var store = new AttemptStore(
-                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v5.json"),
+                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v6.json"),
                 loggerFactory.CreateLogger<AttemptStore>(),
-                // Preserve v1.2.1.5's backoff history while making only the four confirmed false
-                // misses eligible immediately under the corrected matcher.
-                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v4.json"),
-                AnimeThemesProvider.CorrectedAttemptKeys);
+                // Prefer v1.2.1.6 history. A direct v1.2.1.5 -> v1.2.1.7 upgrade falls back to
+                // v4 and invalidates only the three aliases verified to be genuine anime.
+                legacyPath: Path.Combine(
+                    appPaths.PluginConfigurationsPath,
+                    "ThemeMusicFinder.attempts-v5.json"),
+                fallbackLegacyPath: Path.Combine(
+                    appPaths.PluginConfigurationsPath,
+                    "ThemeMusicFinder.attempts-v4.json"),
+                fallbackExcludedLegacyKeys: AnimeThemesProvider.CorrectedAttemptKeys,
+                legacyKeyRewrites: AnimeThemesProvider.RevokedAttemptKeyRewrites);
             var service = new ThemeDownloadService(
                 libraryManager, providerManager, provider, store, fileSystem,
                 loggerFactory.CreateLogger<ThemeDownloadService>(),
                 Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.missing-themes.json"),
-                animeTitleOverrides is null
+                sourceOverrides.Mappings.Count == 0 && animeTitleOverrides is null
                     ? null
                     : new Func<Series, string?>(series =>
-                        AnimeThemesProvider.GetOverrideCacheSuffix(
-                            series,
-                            animeTitleOverrides.Mappings)));
+                        AttemptKeySuffix.Combine(
+                            sourceOverrides.GetCacheSuffix(series),
+                            animeTitleOverrides is null
+                                ? null
+                                : AnimeThemesProvider.GetOverrideCacheSuffix(
+                                    series,
+                                    animeTitleOverrides.Mappings))));
 
             var written = await service.RunAsync(progress, cancellationToken).ConfigureAwait(false);
             foreach (var measured in measuredProviders) measured.Log(taskLogger);

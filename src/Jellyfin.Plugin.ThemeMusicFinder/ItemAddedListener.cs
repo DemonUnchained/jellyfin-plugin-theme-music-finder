@@ -64,14 +64,31 @@ public class ItemAddedListener(
                     mediaEncoder,
                     config.EnableLoudnessNormalization,
                     config.NormalizationTargetLufs);
+                var youtubeDownloader = new YoutubeThemeAudioDownloader(
+                    appPaths,
+                    mediaEncoder,
+                    audioProcessor);
+                var sourceOverrides = await CuratedThemeSourceStore.LoadOrCreateAsync(
+                    Path.Combine(
+                        appPaths.PluginConfigurationsPath,
+                        "ThemeMusicFinder.source-overrides.json"),
+                    _logger,
+                    ct).ConfigureAwait(false);
 
                 var providers = new List<IThemeProvider>();
                 AnimeThemeTitleOverrideStore? animeTitleOverrides = null;
+                if (sourceOverrides.Mappings.Count > 0)
+                {
+                    providers.Add(new CuratedThemeSourceProvider(
+                        sourceOverrides,
+                        youtubeDownloader));
+                }
+
                 if (config.EnableThemerrFallback)
                 {
                     providers.Add(new ThemerrThemeProvider(
                         themerrHttp,
-                        new YoutubeThemeAudioDownloader(appPaths, mediaEncoder, audioProcessor)));
+                        youtubeDownloader));
                 }
 
                 if (config.EnableAnimeThemes)
@@ -96,20 +113,31 @@ public class ItemAddedListener(
                 IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
                 var store = new AttemptStore(
-                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v5.json"),
+                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v6.json"),
                     loggerFactory.CreateLogger<AttemptStore>(),
-                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v4.json"),
-                    AnimeThemesProvider.CorrectedAttemptKeys);
+                    legacyPath: Path.Combine(
+                        appPaths.PluginConfigurationsPath,
+                        "ThemeMusicFinder.attempts-v5.json"),
+                    fallbackLegacyPath: Path.Combine(
+                        appPaths.PluginConfigurationsPath,
+                        "ThemeMusicFinder.attempts-v4.json"),
+                    fallbackExcludedLegacyKeys: AnimeThemesProvider.CorrectedAttemptKeys,
+                    legacyKeyRewrites: AnimeThemesProvider.RevokedAttemptKeyRewrites);
                 await store.LoadAsync(ct).ConfigureAwait(false);
 
                 var service = new ThemeDownloadService(
                     libraryManager, providerManager, provider, store, fileSystem,
                     loggerFactory.CreateLogger<ThemeDownloadService>(),
-                    attemptKeySuffixProvider: animeTitleOverrides is null
+                    attemptKeySuffixProvider: sourceOverrides.Mappings.Count == 0
+                                              && animeTitleOverrides is null
                         ? null
-                        : seriesItem => AnimeThemesProvider.GetOverrideCacheSuffix(
-                            seriesItem,
-                            animeTitleOverrides.Mappings));
+                        : seriesItem => AttemptKeySuffix.Combine(
+                            sourceOverrides.GetCacheSuffix(seriesItem),
+                            animeTitleOverrides is null
+                                ? null
+                                : AnimeThemesProvider.GetOverrideCacheSuffix(
+                                    seriesItem,
+                                    animeTitleOverrides.Mappings)));
 
                 var outcome = ThemeDownloadService.Outcome.Skipped;
                 try

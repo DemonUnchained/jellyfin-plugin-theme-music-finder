@@ -326,7 +326,6 @@ public sealed class AnimeThemesProviderTests
     [Theory]
     [InlineData("74309", "Macross II", "Macross II: Lovers Again")]
     [InlineData("303067", "Norn9: Norn + Nonette", "Norn9: Norn+Nonet")]
-    [InlineData("407633", "When They Cry", "Higurashi no Naku Koro ni Gou")]
     [InlineData("435343", "ZatsuTabi -That's Journey-", "Zatsu Tabi: That's Journey")]
     public void StableTvdbIdAddsVerifiedAliasBeforeTheDisplayTitle(
         string tvdbId,
@@ -339,6 +338,24 @@ public sealed class AnimeThemesProviderTests
         var titles = AnimeThemesProvider.GetLookupTitles(series);
 
         Assert.Equal(expectedAlias, titles[0]);
+    }
+
+    [Fact]
+    public void LiveActionWhenTheyCryIdDoesNotAddAnAnimeAlias()
+    {
+        var series = new Series { Name = "When They Cry" };
+        series.SetProviderId(MetadataProvider.Tvdb, "407633");
+        series.SetProviderId(MetadataProvider.Tmdb, "75475");
+        var unsafeUserFile = new Dictionary<string, string[]>
+        {
+            ["tvdb:407633"] = ["Higurashi no Naku Koro ni Gou"],
+            ["tmdb:75475"] = ["Higurashi no Naku Koro ni Gou"]
+        };
+
+        var titles = AnimeThemesProvider.GetLookupTitles(series, unsafeUserFile);
+
+        Assert.Equal(["When They Cry"], titles);
+        Assert.Null(AnimeThemesProvider.GetOverrideCacheSuffix(series, unsafeUserFile));
     }
 
     [Fact]

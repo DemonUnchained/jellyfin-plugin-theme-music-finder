@@ -24,6 +24,7 @@ public sealed class AnimeThemeTitleOverrideStoreTests
         Assert.Equal("Norn9: Norn+Nonet", store.Mappings["tvdb:303067"][0]);
         using var json = JsonDocument.Parse(await File.ReadAllTextAsync(path));
         Assert.True(json.RootElement.TryGetProperty("tmdb:254853", out _));
+        Assert.False(json.RootElement.TryGetProperty("tvdb:407633", out _));
     }
 
     [Fact]
@@ -56,5 +57,39 @@ public sealed class AnimeThemeTitleOverrideStoreTests
         Assert.NotNull(firstSuffix);
         Assert.NotEqual(firstSuffix, changedSuffix);
         Assert.Single(store.Mappings);
+    }
+
+    [Fact]
+    public async Task ExistingUnsafeLiveActionAliasesAreRemovedFromMemoryAndDisk()
+    {
+        var path = Path.Combine(
+            Directory.CreateTempSubdirectory("theme-overrides-").FullName,
+            "overrides.json");
+        await File.WriteAllTextAsync(path, """
+            {
+              "tvdb:407633": ["Higurashi no Naku Koro ni Gou"],
+              "tmdb:75475": ["Higurashi no Naku Koro ni Gou"],
+              "tvdb:303067": ["Norn9: Norn+Nonet"],
+              "name:user-is-still-editing": ["Preserve on disk"]
+            }
+            """);
+        var logger = new RecordingLogger<AnimeThemeTitleOverrideStore>();
+
+        var store = await AnimeThemeTitleOverrideStore.LoadOrCreateAsync(
+            path,
+            logger,
+            CancellationToken.None);
+
+        Assert.Single(store.Mappings);
+        Assert.True(store.Mappings.ContainsKey("tvdb:303067"));
+        Assert.False(store.Mappings.ContainsKey("tvdb:407633"));
+        Assert.False(store.Mappings.ContainsKey("tmdb:75475"));
+        using var json = JsonDocument.Parse(await File.ReadAllTextAsync(path));
+        Assert.False(json.RootElement.TryGetProperty("tvdb:407633", out _));
+        Assert.False(json.RootElement.TryGetProperty("tmdb:75475", out _));
+        Assert.True(json.RootElement.TryGetProperty("name:user-is-still-editing", out _));
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Message.Contains("Removed 2 revoked", StringComparison.Ordinal));
     }
 }

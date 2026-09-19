@@ -217,10 +217,13 @@ public class ThemeDownloadService(
             attemptKey = $"{attemptKey}@{attemptKeySuffix}";
         if (!attempts.ShouldTry(attemptKey, retryAfterDays, DateTimeOffset.UtcNow))
         {
+            var previousReason = attempts.GetFailureReason(attemptKey);
             return new ProcessResult(
                 Outcome.Skipped,
                 SkipReason.Backoff,
-                $"A confirmed miss is inside the {retryAfterDays}-day retry window.");
+                string.IsNullOrWhiteSpace(previousReason)
+                    ? $"A confirmed miss is inside the {retryAfterDays}-day retry window."
+                    : $"Previous confirmed miss: {previousReason}; retry remains inside the {retryAfterDays}-day window.");
         }
 
         ThemeFetchResult fetch;
@@ -241,7 +244,7 @@ public class ThemeDownloadService(
             // The only case that earns a backoff. Information, not Debug: Jellyfin does not emit
             // Debug at its default level, and "why did nothing happen?" is the question a user
             // actually has when the plugin appears idle.
-            attempts.RecordFailure(attemptKey, DateTimeOffset.UtcNow);
+            attempts.RecordFailure(attemptKey, DateTimeOffset.UtcNow, fetch.Reason);
             logger.LogInformation(
                 "No theme available for {Series} (tvdb {Tvdb}, tmdb {Tmdb}): {Reason}. Will not ask again for {Days} day(s).",
                 series.Name, tvdbId ?? "none", tmdbId ?? "none", fetch.Reason, retryAfterDays);

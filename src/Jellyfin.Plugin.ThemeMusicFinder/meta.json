@@ -1,14 +1,14 @@
 {
   "category": "Metadata",
-  "changelog": "Adds editable stable-ID AnimeThemes aliases with four verified fixes, normalized exact-match discovery, anime-library scoping, smaller miss payloads, targeted cache invalidation, and provider timing.",
-  "description": "Finds missing TV series themes through ThemerrDB, library-aware strictly matched AnimeThemes openings or safe endings, and Plex, then saves normalized theme.mp3 files without overwriting existing themes.",
+  "changelog": "Adds exact stable-ID YouTube source overrides, revokes the unsafe When They Cry alias, preserves miss reasons during retry backoff, and migrates existing attempt history without clearing unrelated backoffs.",
+  "description": "Finds missing TV series themes through exact stable-ID source overrides, ThemerrDB, library-aware strictly matched AnimeThemes openings or safe endings, and Plex, then saves normalized theme.mp3 files without overwriting existing themes.",
   "guid": "03459bac-6165-4b2d-b05f-40b953159b59",
   "name": "Theme Music Finder",
   "overview": "Finds missing TV series theme music and saves it as theme.mp3.",
   "owner": "DemonUnchained",
   "targetAbi": "12.1.0.0",
-  "timestamp": "2026-09-19T20:00:44Z",
-  "version": "1.2.1.6",
+  "timestamp": "2026-09-19T22:32:00Z",
+  "version": "1.2.1.7",
   "status": "Active",
   "autoUpdate": true,
   "assemblies": [

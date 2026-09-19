@@ -462,7 +462,10 @@ public sealed class ThemeDownloadServiceTests : IDisposable
         var attempts = Path.Combine(state, "attempts.json");
         var report = Path.Combine(state, "missing.json");
         var seed = new AttemptStore(attempts);
-        seed.RecordFailure("4", DateTimeOffset.UtcNow);
+        seed.RecordFailure(
+            "4",
+            DateTimeOffset.UtcNow,
+            "ThemerrDB returned 404; upstream returned 404");
         await seed.SaveAsync(CancellationToken.None);
 
         var written = SeriesWithFolder("Written", "1");
@@ -504,6 +507,10 @@ public sealed class ThemeDownloadServiceTests : IDisposable
 
         var deferred = Assert.Single(entries, entry => entry.GetProperty("title").GetString() == "Backoff");
         Assert.Equal("backoff", deferred.GetProperty("status").GetString());
+        Assert.Contains(
+            "ThemerrDB returned 404; upstream returned 404",
+            deferred.GetProperty("reason").GetString(),
+            StringComparison.Ordinal);
         var unidentified = Assert.Single(entries, entry => entry.GetProperty("title").GetString() == "NoId");
         Assert.Equal("no-stable-id", unidentified.GetProperty("status").GetString());
         Assert.Contains(

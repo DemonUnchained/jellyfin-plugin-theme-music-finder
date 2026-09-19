@@ -22,7 +22,7 @@ internal sealed class AnimeThemesProvider(
     private const long MaxResponseBytes = 50L * 1024 * 1024;
 
     // These aliases were verified against AnimeThemes and are bound to stable catalogue IDs.
-    // That makes them materially safer than fuzzy matching a title such as "When They Cry".
+    // That makes them materially safer than fuzzy title matching.
     private static readonly IReadOnlyDictionary<string, string[]> KnownTitleOverrides =
         new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
         {
@@ -30,10 +30,18 @@ internal sealed class AnimeThemesProvider(
             ["tmdb:82247"] = ["Macross II: Lovers Again"],
             ["tvdb:303067"] = ["Norn9: Norn+Nonet"],
             ["tmdb:66120"] = ["Norn9: Norn+Nonet"],
-            ["tvdb:407633"] = ["Higurashi no Naku Koro ni Gou"],
-            ["tmdb:75475"] = ["Higurashi no Naku Koro ni Gou"],
             ["tvdb:435343"] = ["Zatsu Tabi: That's Journey"],
             ["tmdb:254853"] = ["Zatsu Tabi: That's Journey"]
+        };
+
+    // v1.2.1.6 incorrectly treated these stable IDs for the 2016 live-action adaptation as
+    // Higurashi Gou. Ignore them even if they remain in an existing user override file; the
+    // store also removes them from disk. This is deliberately keyed by ID, not display title.
+    private static readonly IReadOnlySet<string> RevokedOverrideKeys =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "tvdb:407633",
+            "tmdb:75475"
         };
 
     private string? _metadataOutageReason;
@@ -42,12 +50,24 @@ internal sealed class AnimeThemesProvider(
 
     private sealed record SearchQuery(string Value, bool IsNormalized);
 
-    /// <summary>TVDB-keyed v1.2.1.5 misses invalidated by this matcher revision.</summary>
+    /// <summary>TVDB-keyed v1.2.1.5 misses invalidated by the verified aliases.</summary>
     internal static IReadOnlySet<string> CorrectedAttemptKeys { get; } =
-        new HashSet<string>(StringComparer.Ordinal) { "74309", "303067", "407633", "435343" };
+        new HashSet<string>(StringComparer.Ordinal) { "74309", "303067", "435343" };
+
+    /// <summary>v1.2.1.6 recorded the revoked live-action retry under the alias-suffixed key.
+    /// Collapse it back to its ordinary stable ID while migrating attempt history.</summary>
+    internal static IReadOnlyDictionary<string, string> RevokedAttemptKeyRewrites { get; } =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["407633@anime-alias-4f0b5d76db20"] = "407633",
+            ["tmdb:75475@anime-alias-4f0b5d76db20"] = "tmdb:75475"
+        };
 
     internal static IReadOnlyDictionary<string, string[]> DefaultTitleOverrides
         => KnownTitleOverrides;
+
+    internal static bool IsRevokedOverrideKey(string key)
+        => RevokedOverrideKeys.Contains(key.Trim());
 
     internal int SearchRequestCount { get; private set; }
 
@@ -302,9 +322,11 @@ internal sealed class AnimeThemesProvider(
             string provider,
             string? id)
         {
+            var key = $"{provider}:{id}";
             if (source is null
                 || string.IsNullOrWhiteSpace(id)
-                || !source.TryGetValue($"{provider}:{id}", out var values)) return;
+                || IsRevokedOverrideKey(key)
+                || !source.TryGetValue(key, out var values)) return;
             foreach (var value in values)
             {
                 if (string.IsNullOrWhiteSpace(value)

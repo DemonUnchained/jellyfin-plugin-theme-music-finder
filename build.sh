@@ -4,7 +4,7 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 publish_dir="$project_dir/artifacts/publish"
 dist_dir="$project_dir/dist"
-version="1.2.1.6"
+version="1.2.1.7"
 
 dotnet publish "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/Jellyfin.Plugin.ThemeMusicFinder.csproj" \
   -c Release \

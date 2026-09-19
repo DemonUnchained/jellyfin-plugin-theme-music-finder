@@ -34,12 +34,13 @@ public class AttemptStoreTests
     {
         var path = TempPath();
         var a = new AttemptStore(path);
-        a.RecordFailure("444904", Now);
+        a.RecordFailure("444904", Now, "ThemerrDB 404; Plex 404");
         await a.SaveAsync(CancellationToken.None);
 
         var b = new AttemptStore(path);
         await b.LoadAsync(CancellationToken.None);
         Assert.False(b.ShouldTry("444904", 7, Now));
+        Assert.Equal("ThemerrDB 404; Plex 404", b.GetFailureReason("444904"));
     }
 
     [Fact]
@@ -215,5 +216,75 @@ public class AttemptStoreTests
         await reloaded.LoadAsync(CancellationToken.None);
         Assert.False(reloaded.ShouldTry("unchanged-miss", 7, Now));
         Assert.True(reloaded.ShouldTry("303067", 7, Now));
+    }
+
+    [Fact]
+    public async Task LegacyTimestampOnlyFileMigratesWithoutInventingAReason()
+    {
+        var directory = Directory.CreateTempSubdirectory().FullName;
+        var legacyPath = Path.Combine(directory, "attempts-v5.json");
+        var currentPath = Path.Combine(directory, "attempts-v6.json");
+        await File.WriteAllTextAsync(
+            legacyPath,
+            "{\"444904\":\"2026-08-17T12:00:00+00:00\"}");
+        var migrated = new AttemptStore(currentPath, legacyPath: legacyPath);
+
+        await migrated.LoadAsync(CancellationToken.None);
+
+        Assert.False(migrated.ShouldTry("444904", 7, Now));
+        Assert.Null(migrated.GetFailureReason("444904"));
+        await migrated.SaveAsync(CancellationToken.None);
+        var json = await File.ReadAllTextAsync(currentPath);
+        Assert.Contains("attemptedAtUtc", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RevokedAliasCacheKeyIsCollapsedBackToStableIdDuringMigration()
+    {
+        var directory = Directory.CreateTempSubdirectory().FullName;
+        var legacyPath = Path.Combine(directory, "attempts-v5.json");
+        var currentPath = Path.Combine(directory, "attempts-v6.json");
+        var legacy = new AttemptStore(legacyPath);
+        legacy.RecordFailure(
+            "407633@anime-alias-4f0b5d76db20",
+            Now,
+            "ThemerrDB returned 404; upstream returned 404");
+        await legacy.SaveAsync(CancellationToken.None);
+        var migrated = new AttemptStore(
+            currentPath,
+            legacyPath: legacyPath,
+            legacyKeyRewrites: AnimeThemesProvider.RevokedAttemptKeyRewrites);
+
+        await migrated.LoadAsync(CancellationToken.None);
+
+        Assert.False(migrated.ShouldTry("407633", 7, Now));
+        Assert.True(migrated.ShouldTry(
+            "407633@anime-alias-4f0b5d76db20",
+            7,
+            Now));
+        Assert.Contains("ThemerrDB returned 404", migrated.GetFailureReason("407633"));
+    }
+
+    [Fact]
+    public async Task MissingPrimaryLegacyFileFallsBackToOlderGeneration()
+    {
+        var directory = Directory.CreateTempSubdirectory().FullName;
+        var missingV5 = Path.Combine(directory, "attempts-v5.json");
+        var legacyV4 = Path.Combine(directory, "attempts-v4.json");
+        var currentV6 = Path.Combine(directory, "attempts-v6.json");
+        var legacy = new AttemptStore(legacyV4);
+        legacy.RecordFailure("unchanged", Now);
+        legacy.RecordFailure("303067", Now);
+        await legacy.SaveAsync(CancellationToken.None);
+        var migrated = new AttemptStore(
+            currentV6,
+            legacyPath: missingV5,
+            fallbackLegacyPath: legacyV4,
+            fallbackExcludedLegacyKeys: new HashSet<string> { "303067" });
+
+        await migrated.LoadAsync(CancellationToken.None);
+
+        Assert.False(migrated.ShouldTry("unchanged", 7, Now));
+        Assert.True(migrated.ShouldTry("303067", 7, Now));
     }
 }
