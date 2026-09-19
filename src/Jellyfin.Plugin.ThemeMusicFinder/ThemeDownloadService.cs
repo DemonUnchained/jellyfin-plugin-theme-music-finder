@@ -16,7 +16,8 @@ public class ThemeDownloadService(
     AttemptStore attempts,
     IFileSystem fileSystem,
     ILogger<ThemeDownloadService> logger,
-    string? reportPath = null)
+    string? reportPath = null,
+    Func<Series, string?>? attemptKeySuffixProvider = null)
 {
     private static readonly TimeSpan Throttle = TimeSpan.FromSeconds(1);
 
@@ -211,6 +212,9 @@ public class ThemeDownloadService(
         // TVDB-based history remains unnamespaced. TMDB-only series use a namespaced key so
         // identifiers from the two catalogues can never collide.
         var attemptKey = !string.IsNullOrEmpty(tvdbId) ? tvdbId : $"tmdb:{tmdbId}";
+        var attemptKeySuffix = attemptKeySuffixProvider?.Invoke(series);
+        if (!string.IsNullOrWhiteSpace(attemptKeySuffix))
+            attemptKey = $"{attemptKey}@{attemptKeySuffix}";
         if (!attempts.ShouldTry(attemptKey, retryAfterDays, DateTimeOffset.UtcNow))
         {
             return new ProcessResult(

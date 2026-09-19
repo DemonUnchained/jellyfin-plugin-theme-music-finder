@@ -186,4 +186,34 @@ public class AttemptStoreTests
         Assert.True(c.ShouldTry("first-id", 7, Now));
         Assert.False(c.ShouldTry("second-id", 7, Now));
     }
+
+    [Fact]
+    public async Task VersionMigrationPreservesBackoffExceptForCorrectedMatcherIds()
+    {
+        var directory = Directory.CreateTempSubdirectory().FullName;
+        var legacyPath = Path.Combine(directory, "attempts-v4.json");
+        var currentPath = Path.Combine(directory, "attempts-v5.json");
+        var legacy = new AttemptStore(legacyPath);
+        legacy.RecordFailure("unchanged-miss", Now);
+        legacy.RecordFailure("303067", Now);
+        await legacy.SaveAsync(CancellationToken.None);
+
+        var migrated = new AttemptStore(
+            currentPath,
+            legacyPath: legacyPath,
+            excludedLegacyKeys: new HashSet<string> { "303067" });
+        await migrated.LoadAsync(CancellationToken.None);
+
+        Assert.False(migrated.ShouldTry("unchanged-miss", 7, Now));
+        Assert.True(migrated.ShouldTry("303067", 7, Now));
+
+        await migrated.SaveAsync(CancellationToken.None);
+        Assert.True(File.Exists(currentPath));
+        Assert.True(File.Exists(legacyPath));
+
+        var reloaded = new AttemptStore(currentPath);
+        await reloaded.LoadAsync(CancellationToken.None);
+        Assert.False(reloaded.ShouldTry("unchanged-miss", 7, Now));
+        Assert.True(reloaded.ShouldTry("303067", 7, Now));
+    }
 }

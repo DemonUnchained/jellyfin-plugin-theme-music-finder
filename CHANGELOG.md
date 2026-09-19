@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.2.1.6
+
+- Adds an editable `ThemeMusicFinder.animethemes-overrides.json` stable-ID alias
+  file, preloaded with four verified false-miss fixes: *Macross II*,
+  *Norn9: Norn + Nonette*, *When They Cry*, and *ZatsuTabi -That's Journey-*.
+- Adds a punctuation- and camel-case-normalized search variant while retaining
+  exact local title/synonym and production-year acceptance; fuzzy results remain
+  rejected.
+- Splits AnimeThemes discovery into a lightweight 20-result search followed by
+  full theme metadata only for an exact match, so misses transfer far less data.
+- Skips AnimeThemes HTTP for known live-action libraries unless the series is in
+  an anime-named library or has Animation/Anime genre metadata. Unknown library
+  placement still falls through safely.
+- Logs per-provider calls, outcomes, elapsed time, AnimeThemes HTTP counts, and
+  the number of non-anime series skipped before HTTP.
+- Migrates v1.2.1.5 attempt history instead of discarding it, invalidating only
+  the four corrected false-miss records so every other backoff remains intact.
+  Adding or changing an override automatically changes only that series' cache
+  key, making it eligible immediately without clearing the global cache.
+
 ## 1.2.1.5
 
 - Reads AnimeThemes' live `animesynonyms` field, checks Jellyfin's original title,

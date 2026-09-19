@@ -20,6 +20,8 @@ internal sealed partial class FakeLibraryManager(params BaseItem[] items)
     /// recursively rather than trusting the returned list.</summary>
     public List<InternalItemsQuery> Queries { get; } = [];
 
+    public Func<BaseItem, List<Folder>> CollectionFolders { get; set; } = _ => [];
+
     public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query)
     {
         Queries.Add(query);
@@ -31,6 +33,8 @@ internal sealed partial class FakeLibraryManager(params BaseItem[] items)
 
     public IReadOnlyList<BaseItem> GetItemList(InternalItemsQuery query, List<BaseItem> parents)
         => throw new NotSupportedException("ThemeDownloadService must not use this overload.");
+
+    public List<Folder> GetCollectionFolders(BaseItem item) => CollectionFolders(item);
 }
 
 internal sealed partial class FakeProviderManager

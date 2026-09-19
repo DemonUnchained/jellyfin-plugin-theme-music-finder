@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using Jellyfin.Plugin.ThemeMusicFinder;
 using MediaBrowser.Controller.Entities.TV;
+using MediaBrowser.Model.Entities;
 
 namespace Jellyfin.Plugin.ThemeMusicFinder.Tests;
 
@@ -65,7 +66,7 @@ public sealed class AnimeThemesProviderTests
     }
 
     private const string ExactMatchJson = """
-        {"anime":[{"name":"Solo Leveling","year":2024,"synonyms":[{"text":"Ore dake Level Up na Ken"}],"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/SoloLeveling-OP1.ogg"}}]}]}]}]}
+        {"anime":[{"name":"Solo Leveling","slug":"solo_leveling","year":2024,"synonyms":[{"text":"Ore dake Level Up na Ken"}],"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/SoloLeveling-OP1.ogg"}}]}]}]}]}
         """;
 
     [Fact]
@@ -82,14 +83,16 @@ public sealed class AnimeThemesProviderTests
         Assert.Equal("AnimeThemes OP1", result.Source);
         Assert.Equal("https://a.animethemes.moe/SoloLeveling-OP1.ogg", result.SourceUri!.ToString());
         Assert.Equal(".ogg", Assert.Single(processor.Requested).Extension);
-        Assert.Equal(2, handler.Requested.Count);
+        Assert.Equal(3, handler.Requested.Count);
+        Assert.Equal("/anime/solo_leveling", handler.Requested[1].AbsolutePath);
+        Assert.Contains("animethemes.animethemeentries.videos.audio", handler.Requested[1].Query);
     }
 
     [Fact]
     public async Task OfficialAnimeSynonymsFieldMatchesAnExactAlias()
     {
         const string json = """
-            {"anime":[{"name":"AI no Idenshi","year":2023,"animesynonyms":[{"text":"The Gene of AI"}],"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/AInoIdenshi-OP1.ogg"}}]}]}]}]}
+            {"anime":[{"name":"AI no Idenshi","slug":"ai_no_idenshi","year":2023,"animesynonyms":[{"text":"The Gene of AI"}],"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/AInoIdenshi-OP1.ogg"}}]}]}]}]}
             """;
         var handler = new StubHandler(json, [1, 2, 3]);
         var provider = new AnimeThemesProvider(
@@ -118,15 +121,16 @@ public sealed class AnimeThemesProviderTests
 
         var query = Uri.UnescapeDataString(handler.Requested[0].Query);
         Assert.Contains("filter[year]=2024", query, StringComparison.Ordinal);
-        Assert.Contains("page[size]=5", query, StringComparison.Ordinal);
+        Assert.Contains("page[size]=20", query, StringComparison.Ordinal);
         Assert.Contains("include=animesynonyms", query, StringComparison.Ordinal);
+        Assert.DoesNotContain("animethemes", query, StringComparison.Ordinal);
     }
 
     [Fact]
     public async Task MatchingYearSuffixIsRemovedBeforeLookup()
     {
         const string json = """
-            {"anime":[{"name":"Kakegurui Twin","year":2022,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/KakeguruiTwin-OP1.ogg"}}]}]}]}]}
+            {"anime":[{"name":"Kakegurui Twin","slug":"kakegurui_twin","year":2022,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/KakeguruiTwin-OP1.ogg"}}]}]}]}]}
             """;
         var handler = new StubHandler(json, [1, 2, 3]);
         var provider = new AnimeThemesProvider(
@@ -158,12 +162,17 @@ public sealed class AnimeThemesProviderTests
     public async Task OriginalTitleIsTriedAfterTheDisplayTitleMisses()
     {
         const string json = """
-            {"anime":[{"name":"Kimi to Boku no Saigo no Senjou","year":2020,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/KimiSen-OP1.ogg"}}]}]}]}]}
+            {"anime":[{"name":"Kimi to Boku no Saigo no Senjou","slug":"kimi_to_boku","year":2020,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/KimiSen-OP1.ogg"}}]}]}]}]}
             """;
         var handler = new RoutingHandler(uri =>
         {
             if (uri.Host == "a.animethemes.moe")
                 return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 2, 3]) };
+            if (uri.AbsolutePath.EndsWith("/kimi_to_boku", StringComparison.Ordinal))
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
             var query = Uri.UnescapeDataString(uri.Query);
             var body = query.Contains("Kimi to Boku", StringComparison.Ordinal)
                 ? json
@@ -186,7 +195,7 @@ public sealed class AnimeThemesProviderTests
         var result = await provider.FetchAsync(series, CancellationToken.None);
 
         Assert.Equal(ThemeFetchStatus.Found, result.Status);
-        Assert.Equal(3, handler.Requested.Count);
+        Assert.Equal(4, handler.Requested.Count);
         Assert.Contains("Our Last Crusade", Uri.UnescapeDataString(handler.Requested[0].Query));
         Assert.Contains("Kimi to Boku", Uri.UnescapeDataString(handler.Requested[1].Query));
     }
@@ -195,7 +204,7 @@ public sealed class AnimeThemesProviderTests
     public async Task SafeEd1IsUsedOnlyWhenNoSafeOp1Exists()
     {
         const string json = """
-            {"anime":[{"name":"Uzumaki","year":2024,"animethemes":[{"type":"ED","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Uzumaki-ED1.ogg"}}]}]}]}]}
+            {"anime":[{"name":"Uzumaki","slug":"uzumaki","year":2024,"animethemes":[{"type":"ED","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Uzumaki-ED1.ogg"}}]}]}]}]}
             """;
         var handler = new StubHandler(json, [1, 2, 3]);
         var provider = new AnimeThemesProvider(
@@ -215,7 +224,7 @@ public sealed class AnimeThemesProviderTests
     public async Task Op1WinsWhenEd1AppearsFirst()
     {
         const string json = """
-            {"anime":[{"name":"Example","year":2024,"animethemes":[{"type":"ED","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Example-ED1.ogg"}}]}]},{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Example-OP1.ogg"}}]}]}]}]}
+            {"anime":[{"name":"Example","slug":"example","year":2024,"animethemes":[{"type":"ED","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Example-ED1.ogg"}}]}]},{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Example-OP1.ogg"}}]}]}]}]}
             """;
         var handler = new StubHandler(json, [1, 2, 3]);
         var provider = new AnimeThemesProvider(
@@ -234,7 +243,7 @@ public sealed class AnimeThemesProviderTests
     public async Task NsfwOrSpoilerEd1IsRejected()
     {
         const string json = """
-            {"anime":[{"name":"Example","year":2024,"animethemes":[{"type":"ED","sequence":1,"animethemeentries":[{"nsfw":true,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Unsafe-ED1.ogg"}}]},{"nsfw":false,"spoiler":true,"videos":[{"audio":{"link":"https://a.animethemes.moe/Spoiler-ED1.ogg"}}]}]}]}]}
+            {"anime":[{"name":"Example","slug":"example","year":2024,"animethemes":[{"type":"ED","sequence":1,"animethemeentries":[{"nsfw":true,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Unsafe-ED1.ogg"}}]},{"nsfw":false,"spoiler":true,"videos":[{"audio":{"link":"https://a.animethemes.moe/Spoiler-ED1.ogg"}}]}]}]}]}
             """;
         var handler = new StubHandler(json, [1, 2, 3]);
         var processor = new FakeThemeAudioProcessor((_, _) => Mp3());
@@ -267,7 +276,7 @@ public sealed class AnimeThemesProviderTests
     public async Task NullSequenceDefaultsToOp1InsteadOfThrowing()
     {
         const string json = """
-            {"anime":[{"name":"Solo Leveling","year":2024,"animethemes":[{"type":"OP","sequence":null,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/SoloLeveling-OP1.ogg"}}]}]}]}]}
+            {"anime":[{"name":"Solo Leveling","slug":"solo_leveling","year":2024,"animethemes":[{"type":"OP","sequence":null,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/SoloLeveling-OP1.ogg"}}]}]}]}]}
             """;
         var handler = new StubHandler(json, [1, 2, 3]);
         var processor = new FakeThemeAudioProcessor((_, _) => Mp3());
@@ -285,7 +294,7 @@ public sealed class AnimeThemesProviderTests
     public async Task NullYearDoesNotMatchOrThrow()
     {
         const string json = """
-            {"anime":[{"name":"Solo Leveling","year":null,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[]}]}]}
+            {"anime":[{"name":"Solo Leveling","slug":"solo_leveling","year":null,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[]}]}]}
             """;
         var handler = new StubHandler(json, [1, 2, 3]);
         var processor = new FakeThemeAudioProcessor((_, _) => Mp3());
@@ -312,6 +321,110 @@ public sealed class AnimeThemesProviderTests
 
         Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
         Assert.Empty(processor.Requested);
+    }
+
+    [Theory]
+    [InlineData("74309", "Macross II", "Macross II: Lovers Again")]
+    [InlineData("303067", "Norn9: Norn + Nonette", "Norn9: Norn+Nonet")]
+    [InlineData("407633", "When They Cry", "Higurashi no Naku Koro ni Gou")]
+    [InlineData("435343", "ZatsuTabi -That's Journey-", "Zatsu Tabi: That's Journey")]
+    public void StableTvdbIdAddsVerifiedAliasBeforeTheDisplayTitle(
+        string tvdbId,
+        string displayTitle,
+        string expectedAlias)
+    {
+        var series = new Series { Name = displayTitle };
+        series.SetProviderId(MetadataProvider.Tvdb, tvdbId);
+
+        var titles = AnimeThemesProvider.GetLookupTitles(series);
+
+        Assert.Equal(expectedAlias, titles[0]);
+    }
+
+    [Fact]
+    public async Task StableIdOverrideRecoversNorn9WithoutFuzzyMatching()
+    {
+        const string json = """
+            {"anime":[{"name":"Norn9: Norn+Nonet","slug":"norn9_nornnonet","year":2016,"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/Norn9-OP1.ogg"}}]}]}]}]}
+            """;
+        var handler = new StubHandler(json, [1, 2, 3]);
+        var provider = new AnimeThemesProvider(
+            new HttpClient(handler),
+            new FakeThemeAudioProcessor((_, _) => Mp3()));
+        var series = new Series
+        {
+            Name = "Norn9: Norn + Nonette",
+            ProductionYear = 2016
+        };
+        series.SetProviderId(MetadataProvider.Tvdb, "303067");
+
+        var result = await provider.FetchAsync(series, CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.Found, result.Status);
+        Assert.Contains(
+            "q=Norn9: Norn+Nonet",
+            Uri.UnescapeDataString(handler.Requested[0].Query),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NormalizedQueryRecoversPunctuationSensitiveSearchWithoutRelaxingAcceptance()
+    {
+        const string json = """
+            {"anime":[{"name":"Zatsu Tabi: That's Journey","slug":"zatsu_tabi_thats_journey","year":2025,"animesynonyms":[{"text":"ZatsuTabi -That's Journey-"}],"animethemes":[{"type":"OP","sequence":1,"animethemeentries":[{"nsfw":false,"spoiler":false,"videos":[{"audio":{"link":"https://a.animethemes.moe/ZatsuTabi-OP1.ogg"}}]}]}]}]}
+            """;
+        var handler = new RoutingHandler(uri =>
+        {
+            if (uri.Host == "a.animethemes.moe")
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 2, 3]) };
+            if (uri.AbsolutePath.EndsWith("/zatsu_tabi_thats_journey", StringComparison.Ordinal)
+                || Uri.UnescapeDataString(uri.Query).Contains(
+                    "q=Zatsu Tabi Thats Journey",
+                    StringComparison.Ordinal))
+            {
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(json, Encoding.UTF8, "application/json")
+                };
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"anime\":[]}", Encoding.UTF8, "application/json")
+            };
+        });
+        var provider = new AnimeThemesProvider(
+            new HttpClient(handler),
+            new FakeThemeAudioProcessor((_, _) => Mp3()));
+
+        var result = await provider.FetchAsync(
+            new Series { Name = "ZatsuTabi -That's Journey-", ProductionYear = 2025 },
+            CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.Found, result.Status);
+        Assert.Equal("Zatsu Tabi Thats Journey", AnimeThemesProvider.NormalizeSearchQuery(
+            "ZatsuTabi -That's Journey-"));
+        Assert.Equal(1, provider.NormalizedQueryRequestCount);
+    }
+
+    [Fact]
+    public async Task MultipleExactTitleAndYearMatchesAreRejectedAsAmbiguous()
+    {
+        const string json = """
+            {"anime":[{"name":"Example","slug":"example_a","year":2024},{"name":"Example","slug":"example_b","year":2024}]}
+            """;
+        var handler = new StubHandler(json, [1, 2, 3]);
+        var processor = new FakeThemeAudioProcessor((_, _) => Mp3());
+        var provider = new AnimeThemesProvider(new HttpClient(handler), processor);
+
+        var result = await provider.FetchAsync(
+            new Series { Name = "Example", ProductionYear = 2024 },
+            CancellationToken.None);
+
+        Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
+        Assert.Contains("multiple exact", result.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(processor.Requested);
+        Assert.Equal(0, provider.DetailRequestCount);
     }
 
     [Fact]

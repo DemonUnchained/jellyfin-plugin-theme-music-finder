@@ -66,6 +66,7 @@ public class ItemAddedListener(
                     config.NormalizationTargetLufs);
 
                 var providers = new List<IThemeProvider>();
+                AnimeThemeTitleOverrideStore? animeTitleOverrides = null;
                 if (config.EnableThemerrFallback)
                 {
                     providers.Add(new ThemerrThemeProvider(
@@ -74,20 +75,41 @@ public class ItemAddedListener(
                 }
 
                 if (config.EnableAnimeThemes)
-                    providers.Add(new AnimeThemesProvider(animeThemesHttp, audioProcessor));
+                {
+                    animeTitleOverrides = await AnimeThemeTitleOverrideStore.LoadOrCreateAsync(
+                        Path.Combine(
+                            appPaths.PluginConfigurationsPath,
+                            "ThemeMusicFinder.animethemes-overrides.json"),
+                        _logger,
+                        ct).ConfigureAwait(false);
+                    providers.Add(new AnimeLibraryThemeProvider(
+                        libraryManager,
+                        new AnimeThemesProvider(
+                            animeThemesHttp,
+                            audioProcessor,
+                            animeTitleOverrides.Mappings)));
+                }
+
                 providers.Add(new PlexThemeProvider(
                     plexHttp,
                     config.EnableLoudnessNormalization ? audioProcessor : null));
                 IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
                 var store = new AttemptStore(
+                    Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v5.json"),
+                    loggerFactory.CreateLogger<AttemptStore>(),
                     Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v4.json"),
-                    loggerFactory.CreateLogger<AttemptStore>());
+                    AnimeThemesProvider.CorrectedAttemptKeys);
                 await store.LoadAsync(ct).ConfigureAwait(false);
 
                 var service = new ThemeDownloadService(
                     libraryManager, providerManager, provider, store, fileSystem,
-                    loggerFactory.CreateLogger<ThemeDownloadService>());
+                    loggerFactory.CreateLogger<ThemeDownloadService>(),
+                    attemptKeySuffixProvider: animeTitleOverrides is null
+                        ? null
+                        : seriesItem => AnimeThemesProvider.GetOverrideCacheSuffix(
+                            seriesItem,
+                            animeTitleOverrides.Mappings));
 
                 var outcome = ThemeDownloadService.Outcome.Skipped;
                 try

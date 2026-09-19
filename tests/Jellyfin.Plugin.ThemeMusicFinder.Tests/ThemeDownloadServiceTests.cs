@@ -74,7 +74,8 @@ public sealed class ThemeDownloadServiceTests : IDisposable
         IEnumerable<Series> series,
         Func<string, ThemeFetchResult>? respond = null,
         string? attemptsPath = null,
-        string? reportPath = null)
+        string? reportPath = null,
+        Func<Series, string?>? attemptKeySuffixProvider = null)
     {
         var attempts = attemptsPath ?? Path.Combine(
             Directory.CreateTempSubdirectory("themesongs-state-").FullName, "attempts.json");
@@ -96,7 +97,14 @@ public sealed class ThemeDownloadServiceTests : IDisposable
             Log = log,
             Delays = delays,
             Service = new ThemeDownloadService(
-                library, providers, provider, store, new FakeFileSystem(), log, reportPath)
+                library,
+                providers,
+                provider,
+                store,
+                new FakeFileSystem(),
+                log,
+                reportPath,
+                attemptKeySuffixProvider)
             {
                 DelayAsync = delays.DelayAsync
             }
@@ -541,6 +549,34 @@ public sealed class ThemeDownloadServiceTests : IDisposable
 
         Assert.Equal(1, await h.Service.RunAsync(null, CancellationToken.None));
         Assert.Equal(["444904"], h.Provider.Requested);
+    }
+
+    [Fact]
+    public async Task AliasCacheSuffixRetriesOnlyTheAffectedSeriesImmediately()
+    {
+        var attempts = Path.Combine(
+            Directory.CreateTempSubdirectory("themesongs-state-").FullName,
+            "attempts.json");
+        var previous = new AttemptStore(attempts);
+        previous.RecordFailure("444904", DateTimeOffset.UtcNow);
+        await previous.SaveAsync(CancellationToken.None);
+        var series = SeriesWithFolder("AliasChanged", "444904");
+
+        var first = Build(
+            [series],
+            _ => ThemeFetchResult.NotFound("still missing"),
+            attempts,
+            attemptKeySuffixProvider: _ => "anime-alias-new");
+        await first.Service.RunAsync(null, CancellationToken.None);
+        Assert.Single(first.Provider.Requested);
+
+        var second = Build(
+            [series],
+            _ => ThemeFetchResult.NotFound("still missing"),
+            attempts,
+            attemptKeySuffixProvider: _ => "anime-alias-new");
+        await second.Service.RunAsync(null, CancellationToken.None);
+        Assert.Empty(second.Provider.Requested);
     }
 
     // ---- I7: one bad series cannot abort the sweep --------------------------------------

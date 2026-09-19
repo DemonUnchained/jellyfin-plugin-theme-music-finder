@@ -20,7 +20,7 @@ public class ThemeMusicFinderPlugin : BasePlugin<PluginConfiguration>, IHasWebPa
     public override Guid Id => Guid.Parse("03459bac-6165-4b2d-b05f-40b953159b59");
 
     public override string Description =>
-        "Finds TV theme songs through ThemerrDB by TMDB ID, strictly matched AnimeThemes openings or safe ending fallback, "
+        "Finds TV theme songs through ThemerrDB by TMDB ID, library-aware strictly matched AnimeThemes openings or safe ending fallback, "
         + "then Plex by TVDB ID, "
         + "and saves them as theme.mp3 in each series folder, "
         + "so Jellyfin can play them on series pages. Requires write access to your TV "

@@ -1,5 +1,6 @@
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
+using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Tasks;
@@ -29,6 +30,7 @@ public class ThemeMusicFinderScheduledTask(
         await ThemeMusicFinderGate.AttemptsFile.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var taskLogger = loggerFactory.CreateLogger<ThemeMusicFinderScheduledTask>();
             using var plexHttp = PlexThemeProvider.CreateClient();
             using var themerrHttp = ThemerrThemeProvider.CreateClient();
             using var animeThemesHttp = AnimeThemesProvider.CreateClient();
@@ -40,33 +42,80 @@ public class ThemeMusicFinderScheduledTask(
                 config.NormalizationTargetLufs);
 
             var providers = new List<IThemeProvider>();
+            var measuredProviders = new List<MeasuredThemeProvider>();
+            AnimeThemesProvider? animeThemesProvider = null;
+            AnimeLibraryThemeProvider? animeLibraryProvider = null;
+            AnimeThemeTitleOverrideStore? animeTitleOverrides = null;
+
+            void AddProvider(string name, IThemeProvider provider)
+            {
+                var measured = new MeasuredThemeProvider(name, provider);
+                measuredProviders.Add(measured);
+                providers.Add(measured);
+            }
+
             if (config.EnableThemerrFallback)
             {
-                providers.Add(new ThemerrThemeProvider(
+                AddProvider("ThemerrDB", new ThemerrThemeProvider(
                     themerrHttp,
                     new YoutubeThemeAudioDownloader(appPaths, mediaEncoder, audioProcessor)));
             }
 
             if (config.EnableAnimeThemes)
-                providers.Add(new AnimeThemesProvider(animeThemesHttp, audioProcessor));
-            providers.Add(new PlexThemeProvider(
+            {
+                animeTitleOverrides = await AnimeThemeTitleOverrideStore.LoadOrCreateAsync(
+                    Path.Combine(
+                        appPaths.PluginConfigurationsPath,
+                        "ThemeMusicFinder.animethemes-overrides.json"),
+                    taskLogger,
+                    cancellationToken).ConfigureAwait(false);
+                animeThemesProvider = new AnimeThemesProvider(
+                    animeThemesHttp,
+                    audioProcessor,
+                    animeTitleOverrides.Mappings);
+                animeLibraryProvider = new AnimeLibraryThemeProvider(libraryManager, animeThemesProvider);
+                AddProvider("AnimeThemes", animeLibraryProvider);
+            }
+
+            AddProvider("Plex", new PlexThemeProvider(
                 plexHttp,
                 config.EnableLoudnessNormalization ? audioProcessor : null));
             IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
             var store = new AttemptStore(
-                // v4 intentionally starts fresh: v1.2.1.4 could not read the live AnimeThemes
-                // synonym field, so many catalogue matches were stored as confirmed misses.
+                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v5.json"),
+                loggerFactory.CreateLogger<AttemptStore>(),
+                // Preserve v1.2.1.5's backoff history while making only the four confirmed false
+                // misses eligible immediately under the corrected matcher.
                 Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.attempts-v4.json"),
-                loggerFactory.CreateLogger<AttemptStore>());
+                AnimeThemesProvider.CorrectedAttemptKeys);
             var service = new ThemeDownloadService(
                 libraryManager, providerManager, provider, store, fileSystem,
                 loggerFactory.CreateLogger<ThemeDownloadService>(),
-                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.missing-themes.json"));
+                Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.missing-themes.json"),
+                animeTitleOverrides is null
+                    ? null
+                    : new Func<Series, string?>(series =>
+                        AnimeThemesProvider.GetOverrideCacheSuffix(
+                            series,
+                            animeTitleOverrides.Mappings)));
 
             var written = await service.RunAsync(progress, cancellationToken).ConfigureAwait(false);
-            loggerFactory.CreateLogger<ThemeMusicFinderScheduledTask>()
-                .LogInformation("Theme Music Finder task finished: {Written} theme(s) downloaded.", written);
+            foreach (var measured in measuredProviders) measured.Log(taskLogger);
+            if (animeThemesProvider is not null && animeLibraryProvider is not null)
+            {
+                taskLogger.LogInformation(
+                    "AnimeThemes HTTP activity: {Searches} search request(s), {Normalized} normalized-query request(s), {Details} detail request(s), {Audio} audio download(s); {Skipped} known non-anime series skipped before HTTP.",
+                    animeThemesProvider.SearchRequestCount,
+                    animeThemesProvider.NormalizedQueryRequestCount,
+                    animeThemesProvider.DetailRequestCount,
+                    animeThemesProvider.AudioRequestCount,
+                    animeLibraryProvider.SkippedSeriesCount);
+            }
+
+            taskLogger.LogInformation(
+                "Theme Music Finder task finished: {Written} theme(s) downloaded.",
+                written);
         }
         finally
         {

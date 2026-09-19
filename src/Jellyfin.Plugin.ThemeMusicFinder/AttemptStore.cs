@@ -6,7 +6,11 @@ namespace Jellyfin.Plugin.ThemeMusicFinder;
 /// <summary>Remembers which TVDB ids were tried and failed, so a nightly sweep
 /// does not re-request a theme that does not exist. Only failures are stored —
 /// a success leaves theme.mp3 on disk, which is its own record.</summary>
-public class AttemptStore(string path, ILogger? logger = null)
+public class AttemptStore(
+    string path,
+    ILogger? logger = null,
+    string? legacyPath = null,
+    IReadOnlySet<string>? excludedLegacyKeys = null)
 {
     private Dictionary<string, DateTimeOffset> _failures = new();
 
@@ -26,13 +30,40 @@ public class AttemptStore(string path, ILogger? logger = null)
     {
         _failures = new();
         _loadFailed = false;
-        if (!File.Exists(path)) return;
+        var readPath = path;
+        var migratingLegacyHistory = false;
+        if (!File.Exists(readPath))
+        {
+            if (string.IsNullOrWhiteSpace(legacyPath) || !File.Exists(legacyPath)) return;
+            readPath = legacyPath;
+            migratingLegacyHistory = true;
+        }
+
         try
         {
-            await using var stream = File.OpenRead(path);
+            await using var stream = File.OpenRead(readPath);
             _failures = await JsonSerializer
                 .DeserializeAsync<Dictionary<string, DateTimeOffset>>(stream, cancellationToken: ct)
                 .ConfigureAwait(false) ?? new();
+
+            if (migratingLegacyHistory)
+            {
+                var removed = 0;
+                if (excludedLegacyKeys is not null)
+                {
+                    foreach (var key in excludedLegacyKeys)
+                    {
+                        if (_failures.Remove(key)) removed++;
+                    }
+                }
+
+                logger?.LogInformation(
+                    "Migrated {Count} attempt-history record(s) from {LegacyPath} to {Path}; invalidated {Removed} record(s) affected by corrected matching.",
+                    _failures.Count,
+                    readPath,
+                    path,
+                    removed);
+            }
         }
         catch (JsonException ex)
         {
@@ -41,14 +72,14 @@ public class AttemptStore(string path, ILogger? logger = null)
             // it (and so a corrupt file cannot wedge the store into never saving again), then
             // carry on with an empty history.
             _failures = new();
-            var quarantine = path + ".invalid";
+            var quarantine = readPath + ".invalid";
             try
             {
-                File.Move(path, quarantine, overwrite: true);
+                File.Move(readPath, quarantine, overwrite: true);
                 logger?.LogWarning(
                     ex,
                     "Attempt history at {Path} is not valid JSON; moved it to {Quarantine} and started a fresh history. Every series becomes eligible again on this run.",
-                    path,
+                    readPath,
                     quarantine);
             }
             catch (Exception moveEx) when (moveEx is IOException or UnauthorizedAccessException)
@@ -58,7 +89,7 @@ public class AttemptStore(string path, ILogger? logger = null)
                 logger?.LogWarning(
                     moveEx,
                     "Attempt history at {Path} is not valid JSON and could not be moved aside; it will be left untouched and no history will be saved this run.",
-                    path);
+                    readPath);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -71,7 +102,7 @@ public class AttemptStore(string path, ILogger? logger = null)
             logger?.LogWarning(
                 ex,
                 "Could not read attempt history at {Path}; continuing with an empty history and skipping the save at the end of this run so the existing file is preserved.",
-                path);
+                readPath);
         }
     }
 
