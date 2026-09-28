@@ -1,7 +1,7 @@
 ---
 name: "Theme Music Finder"
 guid: "03459bac-6165-4b2d-b05f-40b953159b59"
-version: "1.2.1.7"
+version: "1.2.1.8"
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 overview: "Finds missing TV series theme music and saves it as theme.mp3."
@@ -16,4 +16,4 @@ owner: "DemonUnchained"
 artifacts:
   - "Jellyfin.Plugin.ThemeMusicFinder.dll"
   - "YoutubeExplode.dll"
-changelog: "Adds exact stable-ID YouTube source overrides, revokes the unsafe When They Cry alias, preserves miss reasons during retry backoff, and migrates existing attempt history without clearing unrelated backoffs."
+changelog: "Fixes Jellyfin startup discovery by declaring only the plugin assembly while retaining YoutubeExplode as a private dependency, and fixes Plex MP3 normalization by using distinct FFmpeg input and output paths."

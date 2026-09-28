@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.1.8
+
+- Declares only `Jellyfin.Plugin.ThemeMusicFinder.dll` as the plugin assembly in
+  `meta.json`. `YoutubeExplode.dll` remains in the release ZIP as a private
+  runtime dependency, preventing Jellyfin 12.1 from silently removing the
+  plugin during startup discovery.
+- Uses separate source and normalized-output paths for FFmpeg conversion. Plex
+  themes already arrive as MP3 files, so the previous shared `.mp3` path caused
+  FFmpeg to reject every Plex hit because its input and output were identical.
+- Keeps the flat, validated Jellyfin 12.1 release layout and all provider,
+  retry, no-overwrite, normalization, and reporting behavior from 1.2.1.7.
+
 ## 1.2.1.7
 
 - Adds `ThemeMusicFinder.source-overrides.json` for exact stable-ID-to-YouTube
