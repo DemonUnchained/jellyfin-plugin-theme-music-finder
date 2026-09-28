@@ -38,7 +38,10 @@ internal sealed class FfmpegThemeAudioProcessor(
         Directory.CreateDirectory(workDir);
         var stem = Guid.NewGuid().ToString("N");
         var inputPath = Path.Combine(workDir, stem + safeExtension);
-        var outputPath = Path.Combine(workDir, stem + ".mp3");
+        // Keep the normalized output distinct from the source even when the source is already
+        // an MP3 (the Plex provider returns .mp3). FFmpeg refuses an input and output path that
+        // are identical, which otherwise turns every Plex hit into a transient failure.
+        var outputPath = Path.Combine(workDir, stem + ".normalized.mp3");
 
         try
         {
