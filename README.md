@@ -99,13 +99,13 @@ never used.
 2. Create this folder:
 
    ```text
-   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.8/
+   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.9/
    ```
 
 3. Extract `Jellyfin.Plugin.ThemeMusicFinder.dll`, `YoutubeExplode.dll`, and
-   `meta.json` from the release ZIP into that folder. The manifest declares only
-   `Jellyfin.Plugin.ThemeMusicFinder.dll` as the plugin assembly;
-   `YoutubeExplode.dll` remains beside it as a private runtime dependency.
+   `meta.json` from the release ZIP into that folder. The manifest whitelists
+   both DLLs because Jellyfin 12.1 treats `assemblies` as the complete load list,
+   including private runtime dependencies.
 4. Start Jellyfin.
 5. Open **Dashboard → Plugins → My Plugins → Theme Music Finder** and set the
    retry interval and loudness target. Local source overrides are always checked
@@ -192,7 +192,7 @@ dotnet test tests/Jellyfin.Plugin.ThemeMusicFinder.Tests/Jellyfin.Plugin.ThemeMu
 ./build.sh
 ```
 
-The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.8.zip`.
+The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.9.zip`.
 
 ## Source and license
 

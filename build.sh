@@ -4,7 +4,7 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 publish_dir="$project_dir/artifacts/publish"
 dist_dir="$project_dir/dist"
-version="1.2.1.8"
+version="1.2.1.9"
 
 dotnet publish "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/Jellyfin.Plugin.ThemeMusicFinder.csproj" \
   -c Release \
@@ -43,9 +43,9 @@ if ! grep -Fq '"Jellyfin.Plugin.ThemeMusicFinder.dll"' \
   exit 1
 fi
 
-if grep -Fq '"YoutubeExplode.dll"' \
+if ! grep -Fq '"YoutubeExplode.dll"' \
   "$project_dir/src/Jellyfin.Plugin.ThemeMusicFinder/meta.json"; then
-  echo "meta.json must not declare YoutubeExplode.dll as a plugin assembly." >&2
+  echo "meta.json does not whitelist the YoutubeExplode runtime dependency." >&2
   exit 1
 fi
 

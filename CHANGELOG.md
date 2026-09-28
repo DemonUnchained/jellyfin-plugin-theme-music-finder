@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.1.9
+
+- Restores `YoutubeExplode.dll` to the Jellyfin 12.1 `assemblies` whitelist.
+  Jellyfin treats this field as the complete DLL load list, so 1.2.1.8 could not
+  resolve its packaged YoutubeExplode dependency and was marked unsupported.
+- Corrects the earlier startup diagnosis: the disappearing test directories
+  were Jellyfin's normal cleanup of older same-name plugin versions, not a
+  reason to remove a required dependency from the whitelist.
+- Retains the distinct FFmpeg input and normalized-output paths from 1.2.1.8.
+  The corrected package was validated live when *Crusade* downloaded from Plex,
+  wrote one theme, and completed with zero transient, write, or unexpected
+  failures.
+
 ## 1.2.1.8
 
 - Declares only `Jellyfin.Plugin.ThemeMusicFinder.dll` as the plugin assembly in
