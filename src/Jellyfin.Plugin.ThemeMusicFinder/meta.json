@@ -1,18 +1,17 @@
 {
   "category": "Metadata",
-  "changelog": "Adds exact stable-ID YouTube source overrides, revokes the unsafe When They Cry alias, preserves miss reasons during retry backoff, and migrates existing attempt history without clearing unrelated backoffs.",
+  "changelog": "Fixes Jellyfin startup discovery by declaring only the plugin assembly while retaining YoutubeExplode as a private dependency.",
   "description": "Finds missing TV series themes through exact stable-ID source overrides, ThemerrDB, library-aware strictly matched AnimeThemes openings or safe endings, and Plex, then saves normalized theme.mp3 files without overwriting existing themes.",
   "guid": "03459bac-6165-4b2d-b05f-40b953159b59",
   "name": "Theme Music Finder",
   "overview": "Finds missing TV series theme music and saves it as theme.mp3.",
   "owner": "DemonUnchained",
   "targetAbi": "12.1.0.0",
-  "timestamp": "2026-09-19T22:32:00Z",
-  "version": "1.2.1.7",
+  "timestamp": "2026-09-22T10:00:00Z",
+  "version": "1.2.1.8",
   "status": "Active",
   "autoUpdate": true,
   "assemblies": [
-    "Jellyfin.Plugin.ThemeMusicFinder.dll",
-    "YoutubeExplode.dll"
+    "Jellyfin.Plugin.ThemeMusicFinder.dll"
   ]
 }
