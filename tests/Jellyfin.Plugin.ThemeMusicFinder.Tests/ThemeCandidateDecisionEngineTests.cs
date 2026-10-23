@@ -57,7 +57,52 @@ public sealed class ThemeCandidateDecisionEngineTests
     {
         Assert.True(ThemeCandidateDecisionEngine.Evaluate(
             "Translated Name", "The Enfield Poltergeist", 2023,
-            Video("The Enfield Poltergeist official theme song")).Accepted);
+            Video("The Enfield Poltergeist (2023) official theme song")).Accepted);
+    }
+
+    [Theory]
+    [InlineData("The Enfield Poltergeist (2002) main title theme")]
+    [InlineData("The Enfield Poltergeist (2024) official TV theme song")]
+    public void RejectsDifferentProductionYearEvenWithOfficialThemeCues(string candidate)
+    {
+        var result = ThemeCandidateDecisionEngine.Evaluate(
+            "The Enfield Poltergeist", null, 2023, Video(candidate));
+        Assert.False(result.Accepted);
+        Assert.Contains("different production year", result.Reason);
+    }
+
+    [Fact]
+    public void FanMadeDescriptionIsRejected()
+    {
+        var result = ThemeCandidateDecisionEngine.Evaluate(
+            "The Enfield Poltergeist", null, 2023,
+            Video("The Enfield Poltergeist (2023) opening credits theme")
+                with { Description = "Fan made arrangement based on the series" });
+        Assert.False(result.Accepted);
+    }
+
+    [Fact]
+    public void UnclearWinnerIsRejected()
+    {
+        var first = ThemeCandidateDecisionEngine.Evaluate(
+            "The Enfield Poltergeist", null, 2023,
+            Video("The Enfield Poltergeist (2023) TV main theme"));
+        var second = ThemeCandidateDecisionEngine.Evaluate(
+            "The Enfield Poltergeist", null, 2023,
+            Video("The Enfield Poltergeist (2023) opening credits theme"));
+        var ranked = new[] { first, second }.OrderByDescending(c => c.Score).ToArray();
+        Assert.All(ranked, c => Assert.True(c.Accepted));
+        Assert.False(ThemeCandidateDecisionEngine.IsClearWinner(ranked));
+    }
+
+    [Fact]
+    public void IndependentYearAndSeriesContextCanAuthorizeClearMainTheme()
+    {
+        var result = ThemeCandidateDecisionEngine.Evaluate(
+            "The Enfield Poltergeist", null, 2023,
+            Video("The Enfield Poltergeist (2023) official TV main title theme"));
+        Assert.True(result.Accepted);
+        Assert.True(ThemeCandidateDecisionEngine.IsClearWinner([result]));
     }
 
     [Fact]
