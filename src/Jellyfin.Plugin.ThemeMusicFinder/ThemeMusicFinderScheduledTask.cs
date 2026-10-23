@@ -97,7 +97,7 @@ public class ThemeMusicFinderScheduledTask(
             AddProvider("Plex", new PlexThemeProvider(
                 plexHttp,
                 config.EnableLoudnessNormalization ? audioProcessor : null));
-            if (config.EnableAutomaticDiscovery)
+            if (config.EnableAutomaticDiscovery && config.EnableAutomaticDiscoveryWrites)
             {
                 AddProvider("Autonomous YouTube discovery",
                     new AutonomousThemeDiscoveryProvider(
