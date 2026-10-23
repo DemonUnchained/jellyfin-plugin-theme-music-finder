@@ -9,7 +9,7 @@ internal static class AttemptKeySuffix
     // confirmed-miss backoff keys, so existing unresolved shows are retried on upgrade.
     // Keep this stable between nightly scans; otherwise every scan could hammer sources.
     internal static string? Discovery(PluginConfiguration config)
-        => !config.EnableAutomaticDiscovery
+        => !config.EnableAutomaticDiscovery || !config.EnableAutomaticDiscoveryWrites
             ? null
             : "autodiscovery-v2-s" + (config.EnableSoundCloudDiscovery ? "1" : "0")
               + "-b" + (config.EnableBilibiliDiscovery ? "1" : "0");
