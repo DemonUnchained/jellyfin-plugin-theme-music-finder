@@ -66,11 +66,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.0"
+          mkdir -p "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1"
           mkdir -p "$RUNNER_TEMP/jellyfin-smoke/cache"
-          unzip -q "dist/ThemeMusicFinder_1.2.2.0.zip" \
-            -d "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.0"
-          test -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.0/meta.json"
+          unzip -q "dist/ThemeMusicFinder_1.2.2.1.zip" \
+            -d "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1"
+          test -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1/meta.json"
       - name: Start official Jellyfin 12.3 image
         shell: bash
         run: |
@@ -102,7 +102,7 @@ jobs:
             docker logs theme-plugin-smoke 2>&1 | tail -n 140
             exit 1
           fi
-          if [[ ! -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.0/Jellyfin.Plugin.ThemeMusicFinder.dll" ]]; then
+          if [[ ! -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1/Jellyfin.Plugin.ThemeMusicFinder.dll" ]]; then
             echo "Jellyfin removed or relocated the plugin during startup" >&2
             exit 1
           fi
@@ -133,7 +133,7 @@ jobs:
             echo "Plugin did not reload after Jellyfin restarted" >&2
             exit 1
           fi
-          test -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.0/Jellyfin.Plugin.ThemeMusicFinder.dll"
+          test -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1/Jellyfin.Plugin.ThemeMusicFinder.dll"
           echo "Theme Music Finder survived restart and was loaded again"
       - name: Show diagnostics on failure
         if: failure()
