@@ -141,3 +141,45 @@ jobs:
       - name: Stop smoke-test container
         if: always()
         run: docker rm -f theme-plugin-smoke >/dev/null 2>&1 || true
+
+
+  # Publish ONLY after compilation, tests, Jellyfin 12.3 loading, and restart persistence.
+  # This is a prerelease; correctness against the user's live library remains unverified.
+  publish-candidate:
+    name: Publish v1.2.2.1 audit prerelease
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, jellyfin-12-3-load-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: ThemeMusicFinder
+          path: dist
+      - name: Publish verified ZIP as GitHub prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          asset="$(find dist -maxdepth 1 -type f -name 'ThemeMusicFinder_*.zip' -print -quit)"
+          test -n "$asset"
+          version="$(basename "$asset" .zip | sed 's/^ThemeMusicFinder_//')"
+          test "$version" = "1.2.2.1"
+          echo "Release asset: $asset"
+          md5sum "$asset"
+          sha256sum "$asset"
+          tag="v$version"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; not replacing a tagged immutable build."
+            exit 0
+          fi
+          gh release create "$tag" "$asset" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Theme Music Finder $version (audit preview)" \
+            --notes "Jellyfin 12.3 development prerelease. Includes a whole-library read-only discovery audit with checkpoints/resume, YouTube/SoundCloud/Bilibili scoring, and explicit opt-in for writing automatically discovered themes (OFF by default). Existing catalog theme fetching remains available. Automated tests and 12.3 startup/restart smoke tests passed. Candidate accuracy against the real library is not yet validated. Back up the old plugin and run the read-only audit before enabling new-source writes."
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,url,isPrerelease,assets
