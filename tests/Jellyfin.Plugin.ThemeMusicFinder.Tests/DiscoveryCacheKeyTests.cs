@@ -8,6 +8,7 @@ public sealed class DiscoveryCacheKeyTests
         var config = new PluginConfiguration
         {
             EnableAutomaticDiscovery = true,
+            EnableAutomaticDiscoveryWrites = true,
             EnableSoundCloudDiscovery = true,
             EnableBilibiliDiscovery = true
         };
@@ -18,8 +19,11 @@ public sealed class DiscoveryCacheKeyTests
     [Fact]
     public void DisablingOrChangingSourcesInvalidatesOnlyRelevantMisses()
     {
-        var config = new PluginConfiguration { EnableAutomaticDiscovery = true };
+        var config = new PluginConfiguration { EnableAutomaticDiscovery = true, EnableAutomaticDiscoveryWrites = true };
         var original = AttemptKeySuffix.Discovery(config);
+        config.EnableAutomaticDiscoveryWrites = false;
+        Assert.Null(AttemptKeySuffix.Discovery(config));
+        config.EnableAutomaticDiscoveryWrites = true;
         config.EnableSoundCloudDiscovery = false;
         Assert.NotEqual(original, AttemptKeySuffix.Discovery(config));
         config.EnableAutomaticDiscovery = false;
@@ -31,7 +35,7 @@ public sealed class DiscoveryCacheKeyTests
     {
         var combined = AttemptKeySuffix.Combine(
             "curated-abc", "anime-def",
-            AttemptKeySuffix.Discovery(new PluginConfiguration()));
+            AttemptKeySuffix.Discovery(new PluginConfiguration { EnableAutomaticDiscoveryWrites = true }));
         Assert.Equal("curated-abc.anime-def.autodiscovery-v2-s1-b1", combined);
     }
 }
