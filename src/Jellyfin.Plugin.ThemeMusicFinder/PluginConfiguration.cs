@@ -30,6 +30,9 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>After a ThemerrDB miss, try a strictly matched AnimeThemes opening.</summary>
     public bool EnableAnimeThemes { get; set; } = true;
 
+    /// <summary>After exact-ID sources miss, autonomously search and score multiple theme candidates.</summary>
+    public bool EnableAutomaticDiscovery { get; set; } = true;
+
     /// <summary>Normalize new downloads with FFmpeg so themes play at a consistent volume.</summary>
     public bool EnableLoudnessNormalization { get; set; } = true;
 
