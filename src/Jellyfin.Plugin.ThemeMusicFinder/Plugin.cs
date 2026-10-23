@@ -22,7 +22,7 @@ public class ThemeMusicFinderPlugin : BasePlugin<PluginConfiguration>, IHasWebPa
     public override string Description =>
         "Finds TV theme songs through exact stable-ID source overrides, ThemerrDB by TMDB ID, "
         + "library-aware strictly matched AnimeThemes openings or safe ending fallback, "
-        + "then Plex by TVDB ID, "
+        + "then Plex by TVDB ID and conservative autonomous YouTube discovery, "
         + "and saves them as theme.mp3 in each series folder, "
         + "so Jellyfin can play them on series pages. Requires write access to your TV "
         + "library. Never overwrites an existing theme.mp3.";
