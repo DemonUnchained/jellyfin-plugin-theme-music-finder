@@ -1,7 +1,7 @@
 {
   "category": "Metadata",
-  "changelog": "Adds automatic confidence-scored theme discovery via YouTube, SoundCloud, and anime Bilibili with full metadata rechecks, wrong-year and fan-made rejection, conservative ambiguity handling, and upgraded retry keys.",
-  "description": "Finds missing TV series themes via stable-ID overrides, ThemerrDB, AnimeThemes, Plex, and conservative automatic discovery from YouTube, SoundCloud, and Bilibili (anime only), saving validated theme.mp3 files without overwriting existing themes.",
+  "changelog": "Adds Jellyfin 12.3 support, confidence-based multi-source autonomous discovery, an on-demand read-only full-library audit with structured evidence, and explicit opt-in for newly discovered audio installations. Tested for plugin loading and restart persistence.",
+  "description": "Finds TV-series themes through curated stable-ID sources, ThemerrDB, AnimeThemes, Plex, and optional YouTube/SoundCloud/Bilibili discovery; provides a non-writing whole-library audit of candidate matches before automated installation is enabled.",
   "guid": "03459bac-6165-4b2d-b05f-40b953159b59",
   "name": "Theme Music Finder",
   "overview": "Finds missing TV series theme music and saves it as theme.mp3.",
