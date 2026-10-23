@@ -60,7 +60,7 @@
           <li>Skip if a <code>theme.mp3</code> is already there.</li>
           <li>Read its TVDB and TMDB IDs from Jellyfin metadata.</li>
           <li>Skip if it failed recently (see the retry interval).</li>
-          <li>Try an exact stable-ID source override, ThemerrDB by TMDB ID, an exact title/original-title/verified-ID-alias/synonym and year AnimeThemes match, then Plex by TVDB ID.</li>
+          <li>Try an exact stable-ID source override, ThemerrDB by TMDB ID, AnimeThemes by exact title and year, then Plex by TVDB ID. If those sources miss, search YouTube, SoundCloud, and anime-only Bilibili, inspect metadata and refuse uncertain matches.</li>
           <li>Download, throttled to about one series per second.</li>
           <li>Normalize new downloads to the configured loudness target.</li>
           <li>Validate it is a real MP3 &mdash; a missing theme returns an error page, not a 404.</li>
