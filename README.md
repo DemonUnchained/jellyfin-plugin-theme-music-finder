@@ -7,7 +7,7 @@ ending when no opening is available), then Plex TV Themes, and finally cautious 
 and normalizes new downloads with Jellyfin's FFmpeg, then writes a validated
 `theme.mp3` into the series folder.
 
-This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
+This build targets the Jellyfin 12.3 plugin ABI and .NET 10. It works without
 `yt-dlp`, cookies, an API key, or an extra container.
 
 ## What it does
@@ -89,7 +89,7 @@ never used.
 
 ## Requirements
 
-- Jellyfin Server 12.1.
+- Jellyfin Server 12.3.
 - The official Jellyfin 12 runtime (.NET 10).
 - Internet access from the Jellyfin container/server.
 - Write access from Jellyfin to the TV library folders.
