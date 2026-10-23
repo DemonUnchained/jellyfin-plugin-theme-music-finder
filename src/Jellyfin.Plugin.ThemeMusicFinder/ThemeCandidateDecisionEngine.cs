@@ -123,6 +123,9 @@ internal static class ThemeCandidateDecisionEngine
 
         // A common or one-word series title without a year is not enough to tell apart
         // remakes, films, songs, and similarly named series.
+        if (matchedTitle.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length == 1)
+            return Reject(video, "single-word series title is unsafe for automatic matching");
+
         if (ambiguousTitle && !matchedYear)
             return Reject(video, "ambiguous short/common series title without matching production year");
 
