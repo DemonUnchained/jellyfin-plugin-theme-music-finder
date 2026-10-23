@@ -140,6 +140,15 @@ internal static class ThemeCandidateDecisionEngine
         // Channel name is a weak signal, not proof of authenticity.
         if (ContainsPhrase(Normalize(video.Channel), "official")) score += 3;
 
+        // One convincing-looking title can still be a misleading upload. Require independent
+        // corroboration from the year, repeated discovery, or explicit TV/official context.
+        if (!matchedYear && video.SearchHits < 2
+            && !ContainsPhrase(normalizedTitle, "official")
+            && !ContainsPhrase(normalizedTitle, "tv")
+            && !ContainsPhrase(normalizedTitle, "television")
+            && !ContainsPhrase(normalizedTitle, "series"))
+            return Reject(video, "single uncorroborated search result", score);
+
         if (score < MinimumAutomaticScore)
             return Reject(video, "insufficient corroborating metadata (" + score + "/" + MinimumAutomaticScore + ")", score);
 
