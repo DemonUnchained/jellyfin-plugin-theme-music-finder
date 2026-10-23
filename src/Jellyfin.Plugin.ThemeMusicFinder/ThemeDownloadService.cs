@@ -197,7 +197,8 @@ public class ThemeDownloadService(
         var tvdbId = series.GetProviderId(MetadataProvider.Tvdb);
         var tmdbId = series.GetProviderId(MetadataProvider.Tmdb);
         // No stable catalogue id is normal (e.g. YouTube channel "series") — not an error.
-        if (string.IsNullOrEmpty(tvdbId) && string.IsNullOrEmpty(tmdbId))
+        if (string.IsNullOrEmpty(tvdbId) && string.IsNullOrEmpty(tmdbId)
+            && (ThemeMusicFinderPlugin.Instance?.Configuration.EnableAutomaticDiscovery ?? true) == false)
             return new ProcessResult(Outcome.Skipped, SkipReason.NoStableId);
         if (string.IsNullOrEmpty(series.Path))
             return new ProcessResult(Outcome.Skipped, SkipReason.MissingPath);
@@ -211,7 +212,12 @@ public class ThemeDownloadService(
         var retryAfterDays = Math.Max(1, config.RetryAfterDays);
         // TVDB-based history remains unnamespaced. TMDB-only series use a namespaced key so
         // identifiers from the two catalogues can never collide.
-        var attemptKey = !string.IsNullOrEmpty(tvdbId) ? tvdbId : $"tmdb:{tmdbId}";
+        var attemptKey = !string.IsNullOrEmpty(tvdbId)
+            ? tvdbId
+            : !string.IsNullOrEmpty(tmdbId)
+                ? $"tmdb:{tmdbId}"
+                : ThemeCandidateDecisionEngine.GetIdentifierlessAttemptKey(
+                    series.Name, series.ProductionYear ?? 0);
         var attemptKeySuffix = attemptKeySuffixProvider?.Invoke(series);
         if (!string.IsNullOrWhiteSpace(attemptKeySuffix))
             attemptKey = $"{attemptKey}@{attemptKeySuffix}";
