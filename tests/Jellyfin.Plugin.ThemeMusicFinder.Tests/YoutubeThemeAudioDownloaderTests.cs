@@ -25,7 +25,7 @@ public sealed class YoutubeThemeAudioDownloaderTests
                 "--retries", "3",
                 "--fragment-retries", "3",
                 "--extractor-retries", "3",
-                "--format", "ba[ext=m4a]/ba",
+                "--format", "ba[ext=m4a]/ba/b",
                 "--max-filesize", "50M",
                 "--output", "/cache/theme.%(ext)s",
                 source.ToString()

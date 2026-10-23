@@ -50,3 +50,136 @@ jobs:
               --title "Theme Music Finder ${GITHUB_REF_NAME#v}" \
               --generate-notes
           fi
+
+
+  jellyfin-12-3-load-smoke:
+    name: Plugin load on Jellyfin 12.3
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: ThemeMusicFinder
+          path: dist
+      - name: Install release ZIP into isolated Jellyfin configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1"
+          mkdir -p "$RUNNER_TEMP/jellyfin-smoke/cache"
+          unzip -q "dist/ThemeMusicFinder_1.2.2.1.zip" \
+            -d "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1"
+          test -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1/meta.json"
+      - name: Start official Jellyfin 12.3 image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name theme-plugin-smoke \
+            -v "$RUNNER_TEMP/jellyfin-smoke/config:/config" \
+            -v "$RUNNER_TEMP/jellyfin-smoke/cache:/cache" \
+            jellyfin/jellyfin:12.3
+      - name: Assert that Jellyfin loads the plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          loaded=0
+          for i in $(seq 1 90); do
+            if docker logs theme-plugin-smoke 2>&1 | grep -iEq \
+              'Loaded plugin.*Theme Music Finder|Loaded plugin.*ThemeMusicFinder'; then
+              loaded=1
+              break
+            fi
+            if ! docker inspect -f '{{.State.Running}}' theme-plugin-smoke | grep -q true; then
+              echo "Jellyfin exited before plugin load" >&2
+              docker logs theme-plugin-smoke 2>&1 | tail -n 120
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$loaded" -ne 1 ]]; then
+            echo "Plugin load was not confirmed by Jellyfin startup logs" >&2
+            docker logs theme-plugin-smoke 2>&1 | tail -n 140
+            exit 1
+          fi
+          if [[ ! -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1/Jellyfin.Plugin.ThemeMusicFinder.dll" ]]; then
+            echo "Jellyfin removed or relocated the plugin during startup" >&2
+            exit 1
+          fi
+          docker logs theme-plugin-smoke 2>&1 | grep -iE \
+            'Loaded plugin.*Theme Music Finder|Loaded plugin.*ThemeMusicFinder' | tail -n 5
+      - name: Restart Jellyfin and verify plugin persistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          loaded_before="$(docker logs theme-plugin-smoke 2>&1 | grep -icE \
+            'Loaded plugin.*Theme Music Finder|Loaded plugin.*ThemeMusicFinder' || true)"
+          docker restart theme-plugin-smoke >/dev/null
+          reloaded=0
+          for i in $(seq 1 75); do
+            loaded_after="$(docker logs theme-plugin-smoke 2>&1 | grep -icE \
+              'Loaded plugin.*Theme Music Finder|Loaded plugin.*ThemeMusicFinder' || true)"
+            if [[ "$loaded_after" -gt "$loaded_before" ]]; then
+              reloaded=1
+              break
+            fi
+            if ! docker inspect -f '{{.State.Running}}' theme-plugin-smoke | grep -q true; then
+              echo "Jellyfin exited on restart" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$reloaded" -ne 1 ]]; then
+            echo "Plugin did not reload after Jellyfin restarted" >&2
+            exit 1
+          fi
+          test -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.1/Jellyfin.Plugin.ThemeMusicFinder.dll"
+          echo "Theme Music Finder survived restart and was loaded again"
+      - name: Show diagnostics on failure
+        if: failure()
+        run: docker logs theme-plugin-smoke 2>&1 | tail -n 180 || true
+      - name: Stop smoke-test container
+        if: always()
+        run: docker rm -f theme-plugin-smoke >/dev/null 2>&1 || true
+
+
+  # Publish ONLY after compilation, tests, Jellyfin 12.3 loading, and restart persistence.
+  # This is a prerelease; correctness against the user's live library remains unverified.
+  publish-candidate:
+    name: Publish v1.2.2.1 audit prerelease
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, jellyfin-12-3-load-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: ThemeMusicFinder
+          path: dist
+      - name: Publish verified ZIP as GitHub prerelease
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          asset="$(find dist -maxdepth 1 -type f -name 'ThemeMusicFinder_*.zip' -print -quit)"
+          test -n "$asset"
+          version="$(basename "$asset" .zip | sed 's/^ThemeMusicFinder_//')"
+          test "$version" = "1.2.2.1"
+          echo "Release asset: $asset"
+          md5sum "$asset"
+          sha256sum "$asset"
+          tag="v$version"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; not replacing a tagged immutable build."
+            exit 0
+          fi
+          gh release create "$tag" "$asset" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Theme Music Finder $version (audit preview)" \
+            --notes "Jellyfin 12.3 development prerelease. Includes a whole-library read-only discovery audit with checkpoints/resume, YouTube/SoundCloud/Bilibili scoring, and explicit opt-in for writing automatically discovered themes (OFF by default). Existing catalog theme fetching remains available. Automated tests and 12.3 startup/restart smoke tests passed. Candidate accuracy against the real library is not yet validated. Back up the old plugin and run the read-only audit before enabling new-source writes."
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,url,isPrerelease,assets

@@ -63,6 +63,17 @@ internal sealed class YoutubeThemeAudioDownloader(
                 }
             }
 
+            // YoutubeExplode only understands YouTube. SoundCloud/Bilibili must never be
+            // sent to a YouTube-only fallback; keep the original yt-dlp error instead.
+            if (!ThemerrThemeProvider.IsAllowedYoutubeUri(source))
+            {
+                throw new InvalidOperationException(
+                    ytDlpFailure is null
+                        ? "yt-dlp is required to fetch SoundCloud/Bilibili themes"
+                        : "yt-dlp could not fetch a non-YouTube theme: " + Truncate(ytDlpFailure.Message, 300),
+                    ytDlpFailure);
+            }
+
             try
             {
                 var downloadedPath = await DownloadWithYoutubeExplodeAsync(
@@ -193,7 +204,7 @@ internal sealed class YoutubeThemeAudioDownloader(
             "--retries", "3",
             "--fragment-retries", "3",
             "--extractor-retries", "3",
-            "--format", "ba[ext=m4a]/ba",
+            "--format", "ba[ext=m4a]/ba/b",
             "--max-filesize", "50M",
             "--output", outputTemplate,
             source.ToString()

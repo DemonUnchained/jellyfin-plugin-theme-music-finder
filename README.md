@@ -3,11 +3,11 @@
 Theme Music Finder scans Jellyfin TV series, first checks exact local stable-ID
 overrides for a hand-picked YouTube video, then looks up missing themes in
 ThemerrDB, library-aware strictly matched AnimeThemes openings (or a safe first
-ending when no opening is available), and finally Plex TV Themes. It converts
+ending when no opening is available), then Plex TV Themes, and finally cautious autonomous search across YouTube, SoundCloud, and (for anime) Bilibili when yt-dlp is installed. It converts
 and normalizes new downloads with Jellyfin's FFmpeg, then writes a validated
 `theme.mp3` into the series folder.
 
-This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
+This build targets the Jellyfin 12.3 plugin ABI and .NET 10. It works without
 `yt-dlp`, cookies, an API key, or an extra container.
 
 ## What it does
@@ -42,6 +42,7 @@ This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
 - Continues to later independent providers after a temporary provider failure;
   if every fallback misses, the temporary result remains retryable and is not
   added to the negative cache.
+- Automatically searches up to three YouTube queries, two SoundCloud queries, and (for animation/anime only) two Bilibili queries, each with up to five results, after existing catalogue providers miss. Search metadata is provisional: up to six shortlisted candidates receive full metadata rechecks before any download. Exact show-title inclusion, explicit conflicting years, original-title variants, duration, title/theme context, fan-made descriptions, misleading words, and competing similarly ranked videos are all checked. The plugin abstains if no candidate clearly wins. YouTube-only success is not required; SoundCloud and Bilibili use the same yt-dlp/FFmpeg pipeline. Searches are throttled and failures are retryable; optional providers have separate settings. This mode requires yt-dlp under Jellyfin's program-data/trailer-tools directory.
 - Saves the result as `<series folder>/theme.mp3`.
 - Normalizes new downloads to -18 LUFS integrated loudness and -1.5 dBTP true
   peak by default. The target and normalization toggle are configurable.
@@ -88,7 +89,7 @@ never used.
 
 ## Requirements
 
-- Jellyfin Server 12.1.
+- Jellyfin Server 12.3.
 - The official Jellyfin 12 runtime (.NET 10).
 - Internet access from the Jellyfin container/server.
 - Write access from Jellyfin to the TV library folders.
@@ -201,3 +202,33 @@ This Jellyfin 12 build is derived from the MIT-licensed
 The original safety-oriented download and test architecture is retained and
 ported to Jellyfin 12. The binary package also includes the MIT-licensed
 YoutubeExplode dependency. See `LICENSE` and `THIRD_PARTY_NOTICES.md`.
+
+
+## Automatic discovery limitations (development branch)
+
+The automatic decision engine is a **conservative metadata heuristic, not music fingerprinting**.
+A source title saying `official` cannot independently verify that its audio is the canonical
+opening. A valid MP3 is a file-integrity check, not a correct-theme proof. The plugin deliberately
+leaves uncertain and similarly scored candidates unresolved rather than risking wrong audio.
+Searches are bounded and respect existing theme files, confirmed-miss backoff, cancellation,
+source-specific failures, and network timeouts. Extra discovery sources do not require manual
+batches of stable-ID overrides but depend on yt-dlp and their providers remaining accessible.
+End-to-end validation on a controlled Jellyfin test library remains required before release.
+
+## Whole-library, read-only discovery audit (development)
+
+Run **Dashboard → Scheduled Tasks → Theme Music Finder → Audit automatic theme discovery (read only)**.
+This runs automatically through all physical TV series missing `theme.mp3` and writes
+`/config/plugins/configurations/ThemeMusicFinder.discovery-audit.json` (with Jellyfin's
+actual plugin configuration directory used on non-container systems).
+The JSON contains each evaluated series, TVDB/TMDB identifiers, title, year, candidate
+source and URL, score, rejection/ambiguity reason, and transient error classification.
+**It does not download music, touch existing themes, or alter attempts/backoff history.**
+The task is manual-on-demand rather than nightly by default to avoid doubling API requests.
+
+**New-source automatic writing is disabled by default** via
+`EnableAutomaticDiscoveryWrites=false` until audit results have been assessed. The
+existing exact-ID ThemerrDB, AnimeThemes, and Plex download chain remains operational.
+After enabling automatic discovery writes, the nightly task and item-added listener
+use the same confidence-scored rules. The sources are metadata evidence only—not
+acoustic recognition. No guaranteed-correct audio assertion is made.

@@ -110,6 +110,13 @@ public class ItemAddedListener(
                 providers.Add(new PlexThemeProvider(
                     plexHttp,
                     config.EnableLoudnessNormalization ? audioProcessor : null));
+                if (config.EnableAutomaticDiscovery && config.EnableAutomaticDiscoveryWrites)
+                {
+                    providers.Add(new AutonomousThemeDiscoveryProvider(
+                        appPaths, youtubeDownloader, libraryManager,
+                        config.EnableSoundCloudDiscovery, config.EnableBilibiliDiscovery));
+                }
+
                 IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
                 var store = new AttemptStore(
@@ -128,16 +135,13 @@ public class ItemAddedListener(
                 var service = new ThemeDownloadService(
                     libraryManager, providerManager, provider, store, fileSystem,
                     loggerFactory.CreateLogger<ThemeDownloadService>(),
-                    attemptKeySuffixProvider: sourceOverrides.Mappings.Count == 0
-                                              && animeTitleOverrides is null
-                        ? null
-                        : seriesItem => AttemptKeySuffix.Combine(
-                            sourceOverrides.GetCacheSuffix(seriesItem),
-                            animeTitleOverrides is null
-                                ? null
-                                : AnimeThemesProvider.GetOverrideCacheSuffix(
-                                    seriesItem,
-                                    animeTitleOverrides.Mappings)));
+                    attemptKeySuffixProvider: seriesItem => AttemptKeySuffix.Combine(
+                        sourceOverrides.GetCacheSuffix(seriesItem),
+                        animeTitleOverrides is null
+                            ? null
+                            : AnimeThemesProvider.GetOverrideCacheSuffix(
+                                seriesItem, animeTitleOverrides.Mappings),
+                        AttemptKeySuffix.Discovery(config)));
 
                 var outcome = ThemeDownloadService.Outcome.Skipped;
                 try

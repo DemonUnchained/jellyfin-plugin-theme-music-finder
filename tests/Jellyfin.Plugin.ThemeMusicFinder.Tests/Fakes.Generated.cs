@@ -8,6 +8,9 @@ namespace Jellyfin.Plugin.ThemeMusicFinder.Tests;
 
 internal sealed partial class FakeLibraryManager : global::MediaBrowser.Controller.Library.ILibraryManager
 {
+    // Jellyfin 12.3 adds stable view-ID lookups to ILibraryManager.
+    public global::System.Guid GetNamedViewId(global::Jellyfin.Database.Implementations.Entities.User user, global::System.Guid parentId, global::System.Nullable<global::Jellyfin.Data.Enums.CollectionType> viewType) => throw new global::System.NotImplementedException();
+    public global::System.Guid GetShadowViewId(global::System.String name, global::System.Guid parentId, global::System.Nullable<global::Jellyfin.Data.Enums.CollectionType> viewType) => throw new global::System.NotImplementedException();
     public global::MediaBrowser.Controller.Entities.AggregateFolder RootFolder { get => throw new global::System.NotImplementedException(); }
     public global::System.Boolean IsScanRunning { get => throw new global::System.NotImplementedException(); }
     public event global::System.EventHandler<global::MediaBrowser.Controller.Library.ItemChangeEventArgs> ItemAdded { add { } remove { } }

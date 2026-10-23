@@ -26,7 +26,11 @@ public enum ThemeFetchStatus
 
     /// <summary>This provider cannot safely identify the series. The provider chain may try
     /// another catalogue, but no request was made and this result must not earn backoff.</summary>
-    NotApplicable
+    NotApplicable,
+
+    /// <summary>An audit-only candidate was selected from inspected metadata. No audio was
+    /// downloaded and no theme.mp3 was written; this is NOT a verified theme recording.</summary>
+    Preview
 }
 
 /// <summary>The outcome of one upstream lookup.</summary>
@@ -40,10 +44,17 @@ public sealed record ThemeFetchResult(
     byte[]? Body,
     string? Reason,
     string? Source = null,
-    Uri? SourceUri = null)
+    Uri? SourceUri = null,
+    int? ConfidenceScore = null,
+    string? CandidateTitle = null)
 {
     public static ThemeFetchResult Found(byte[] body, string? source = null, Uri? sourceUri = null)
         => new(ThemeFetchStatus.Found, body, null, source, sourceUri);
+
+    public static ThemeFetchResult PreviewCandidate(
+        string source, Uri sourceUri, string candidateTitle, int confidenceScore, string reason)
+        => new(ThemeFetchStatus.Preview, null, reason, source, sourceUri,
+            confidenceScore, candidateTitle);
 
     public static ThemeFetchResult NotFound(string reason) => new(ThemeFetchStatus.NotFound, null, reason);
 
