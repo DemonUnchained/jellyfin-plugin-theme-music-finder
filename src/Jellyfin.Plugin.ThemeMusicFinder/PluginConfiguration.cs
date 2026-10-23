@@ -33,6 +33,12 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>After exact-ID sources miss, autonomously search and score multiple theme candidates.</summary>
     public bool EnableAutomaticDiscovery { get; set; } = true;
 
+    /// <summary>Search SoundCloud for additional high-confidence theme recordings.</summary>
+    public bool EnableSoundCloudDiscovery { get; set; } = true;
+
+    /// <summary>Search Bilibili only for series identified as animation/anime.</summary>
+    public bool EnableBilibiliDiscovery { get; set; } = true;
+
     /// <summary>Normalize new downloads with FFmpeg so themes play at a consistent volume.</summary>
     public bool EnableLoudnessNormalization { get; set; } = true;
 
