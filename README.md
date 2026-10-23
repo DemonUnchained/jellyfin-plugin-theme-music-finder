@@ -3,7 +3,7 @@
 Theme Music Finder scans Jellyfin TV series, first checks exact local stable-ID
 overrides for a hand-picked YouTube video, then looks up missing themes in
 ThemerrDB, library-aware strictly matched AnimeThemes openings (or a safe first
-ending when no opening is available), and finally Plex TV Themes. It converts
+ending when no opening is available), then Plex TV Themes, and finally cautious autonomous multi-query YouTube discovery when yt-dlp is installed. It converts
 and normalizes new downloads with Jellyfin's FFmpeg, then writes a validated
 `theme.mp3` into the series folder.
 
@@ -42,6 +42,7 @@ This build targets the Jellyfin 12.1 plugin ABI and .NET 10. It works without
 - Continues to later independent providers after a temporary provider failure;
   if every fallback misses, the temporary result remains retryable and is not
   added to the negative cache.
+- Automatically searches up to three title-specific YouTube queries (five results each) when existing catalogues miss; compares exact title, theme-specific phrases, runtime, release-year evidence, and known misleading labels. Only sufficiently confident candidates are downloaded; uncertain ties are left unresolved. This mode requires yt-dlp under Jellyfin's program-data/trailer-tools directory and can be disabled in plugin settings.
 - Saves the result as `<series folder>/theme.mp3`.
 - Normalizes new downloads to -18 LUFS integrated loudness and -1.5 dBTP true
   peak by default. The target and normalization toggle are configurable.
