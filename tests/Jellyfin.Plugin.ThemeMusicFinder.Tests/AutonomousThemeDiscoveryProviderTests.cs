@@ -73,6 +73,20 @@ public sealed class AutonomousThemeDiscoveryProviderTests
     }
 
     [Fact]
+    public void FullMetadataCannotRedirectToDifferentVideoIdentity()
+    {
+        var selected = new ThemeSearchVideo("abc123_XYZ9",
+            "The Enfield Poltergeist (2023) TV main title theme",
+            "Official channel", TimeSpan.FromSeconds(90));
+        using var changed = JsonDocument.Parse(
+            "{\"id\":\"abc123_XYZ8\",\"title\":\"The Enfield Poltergeist (2023) TV main title theme\"}");
+        using var same = JsonDocument.Parse(
+            "{\"id\":\"abc123_XYZ9\",\"title\":\"The Enfield Poltergeist (2023) TV main title theme\"}");
+        Assert.False(AutonomousThemeDiscoveryProvider.IsSameCandidate(selected, changed.RootElement));
+        Assert.True(AutonomousThemeDiscoveryProvider.IsSameCandidate(selected, same.RootElement));
+    }
+
+    [Fact]
     public void DoesNotAcceptCrossSourceRedirect()
     {
         Assert.False(AutonomousThemeDiscoveryProvider.IsAllowedUri(
