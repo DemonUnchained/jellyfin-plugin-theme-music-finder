@@ -1,4 +1,6 @@
 using System.Text.Json;
+using System.Security.Cryptography;
+using System.Text;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -58,110 +60,159 @@ public sealed class ThemeDiscoveryAuditScheduledTask(
                 IsVirtualItem = false
             }).OfType<Series>().ToList();
 
-            var output = new List<ThemeDiscoveryAuditEntry>();
-            var skippedExisting = 0;
-            var noPath = 0;
-            var chosen = 0;
-            var rejected = 0;
+            // Stable across restarts, but invalidated when show identities or the enabled
+            // alternative sources change. A completed audit always starts fresh.
+            var signatureInput = string.Join("\n", items
+                .OrderBy(series => series.Path, StringComparer.Ordinal)
+                .Select(series => series.Path + "|" + series.Name + "|" + series.ProductionYear))
+                + "|soundcloud:" + config.EnableSoundCloudDiscovery
+                + "|bilibili:" + config.EnableBilibiliDiscovery;
+            var signature = Convert.ToHexStringLower(
+                SHA256.HashData(Encoding.UTF8.GetBytes(signatureInput)));
+
+            var path = Path.Combine(appPaths.PluginConfigurationsPath,
+                "ThemeMusicFinder.discovery-audit.json");
+            var previous = await ThemeDiscoveryAuditReport.LoadIncompleteAsync(
+                path, signature, cancellationToken).ConfigureAwait(false);
+
+            var activePaths = items
+                .Where(series => !string.IsNullOrWhiteSpace(series.Path))
+                .Where(series => !File.Exists(Path.Combine(series.Path, "theme.mp3")))
+                .Select(series => series.Path)
+                .ToHashSet(StringComparer.Ordinal);
+            var output = previous?.Entries
+                .Where(entry => activePaths.Contains(entry.Path)
+                    && entry.Status is not ("transient" or "candidate-unavailable"))
+                .ToList() ?? [];
+            var visited = output.Select(entry => entry.Path)
+                .ToHashSet(StringComparer.Ordinal);
+
+            var skippedExisting = items.Count(series =>
+                !string.IsNullOrWhiteSpace(series.Path)
+                && File.Exists(Path.Combine(series.Path, "theme.mp3")));
+            var noPath = items.Count(series => string.IsNullOrWhiteSpace(series.Path));
+            var chosen = output.Count(entry => entry.Status == "candidate");
+            var rejected = output.Count(entry => entry.Status == "rejected");
             var transient = 0;
-            var unavailable = 0;
+            var unavailable = output.Count(entry => entry.Status == "not-applicable");
+            var newEvaluations = 0;
 
-            for (var i = 0; i < items.Count; i++)
+            if (visited.Count > 0)
+                log.LogInformation("Resuming read-only theme discovery audit with {Count} earlier decisions.",
+                    visited.Count);
+
+            async Task SaveCheckpointAsync(bool complete, CancellationToken writeToken)
+                => await ThemeDiscoveryAuditReport.WriteAtomicAsync(
+                    path,
+                    new ThemeDiscoveryAuditReport
+                    {
+                        ScanSignature = signature,
+                        Complete = complete,
+                        GeneratedAtUtc = DateTimeOffset.UtcNow,
+                        TotalSeriesScanned = items.Count,
+                        ExistingThemesSkipped = skippedExisting,
+                        MissingPathsSkipped = noPath,
+                        CandidateCount = chosen,
+                        RejectedCount = rejected,
+                        TransientCount = transient,
+                        NotApplicableCount = unavailable,
+                        Entries = output.ToArray()
+                    },
+                    writeToken).ConfigureAwait(false);
+
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var series = items[i];
-                progress?.Report(items.Count == 0 ? 100 : i * 100.0 / items.Count);
-
-                if (string.IsNullOrWhiteSpace(series.Path))
+                for (var i = 0; i < items.Count; i++)
                 {
-                    noPath++;
-                    continue;
-                }
-                if (File.Exists(Path.Combine(series.Path, "theme.mp3")))
-                {
-                    skippedExisting++;
-                    continue;
-                }
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var series = items[i];
+                    progress?.Report(items.Count == 0 ? 100 : i * 100.0 / items.Count);
+                    if (string.IsNullOrWhiteSpace(series.Path)
+                        || File.Exists(Path.Combine(series.Path, "theme.mp3"))
+                        || visited.Contains(series.Path))
+                        continue;
 
-                ThemeFetchResult result;
+                    ThemeFetchResult result;
+                    try
+                    {
+                        result = await discovery.FetchAsync(series, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        log.LogWarning(ex, "Discovery audit failed for {Series}", series.Name);
+                        result = ThemeFetchResult.Transient("unexpected audit error: " + ex.Message);
+                    }
+
+                    string status;
+                    switch (result.Status)
+                    {
+                        case ThemeFetchStatus.Preview:
+                            chosen++;
+                            status = "candidate";
+                            break;
+                        case ThemeFetchStatus.NotFound:
+                            rejected++;
+                            status = "rejected";
+                            break;
+                        case ThemeFetchStatus.Transient:
+                            transient++;
+                            status = "transient";
+                            break;
+                        case ThemeFetchStatus.NotApplicable:
+                            unavailable++;
+                            status = "not-applicable";
+                            break;
+                        case ThemeFetchStatus.CandidateUnavailable:
+                            transient++;
+                            status = "candidate-unavailable";
+                            break;
+                        default:
+                            throw new InvalidOperationException(
+                                "Read-only audit received an unexpected downloaded-audio result.");
+                    }
+
+                    output.Add(new ThemeDiscoveryAuditEntry(
+                        series.Name,
+                        series.OriginalTitle,
+                        series.ProductionYear,
+                        series.GetProviderId(MetadataProvider.Tvdb),
+                        series.GetProviderId(MetadataProvider.Tmdb),
+                        series.Path,
+                        status,
+                        result.Reason ?? "no reason supplied",
+                        result.Source,
+                        result.SourceUri?.ToString(),
+                        result.CandidateTitle,
+                        result.ConfidenceScore));
+
+                    newEvaluations++;
+                    // Checkpoint every ten evaluated shows automatically. This is an
+                    // internal durability threshold, NOT a manual batch requiring input.
+                    if (newEvaluations % 10 == 0)
+                        await SaveCheckpointAsync(false, cancellationToken).ConfigureAwait(false);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Keep verified metadata decisions from the interrupted sweep so an
+                // administrator can simply run the task again to resume.
                 try
                 {
-                    result = await discovery.FetchAsync(series, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
+                    await SaveCheckpointAsync(false, CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
-                    log.LogWarning(ex, "Discovery audit failed for {Series}", series.Name);
-                    result = ThemeFetchResult.Transient("unexpected audit error: " + ex.Message);
+                    log.LogWarning(ex, "Could not save interrupted audit checkpoint to {Path}", path);
                 }
-
-                string status;
-                switch (result.Status)
-                {
-                    case ThemeFetchStatus.Preview:
-                        chosen++;
-                        status = "candidate";
-                        break;
-                    case ThemeFetchStatus.NotFound:
-                        rejected++;
-                        status = "rejected";
-                        break;
-                    case ThemeFetchStatus.Transient:
-                        transient++;
-                        status = "transient";
-                        break;
-                    case ThemeFetchStatus.NotApplicable:
-                        unavailable++;
-                        status = "not-applicable";
-                        break;
-                    case ThemeFetchStatus.CandidateUnavailable:
-                        transient++;
-                        status = "candidate-unavailable";
-                        break;
-                    default:
-                        // No audio can possibly be produced in audit mode. If a future
-                        // refactor changes this invariant, fail loudly without touching media.
-                        throw new InvalidOperationException(
-                            "Read-only audit received an unexpected downloaded-audio result.");
-                }
-
-                output.Add(new ThemeDiscoveryAuditEntry(
-                    series.Name,
-                    series.OriginalTitle,
-                    series.ProductionYear,
-                    series.GetProviderId(MetadataProvider.Tvdb),
-                    series.GetProviderId(MetadataProvider.Tmdb),
-                    series.Path,
-                    status,
-                    result.Reason ?? "no reason supplied",
-                    result.Source,
-                    result.SourceUri?.ToString(),
-                    result.CandidateTitle,
-                    result.ConfidenceScore));
+                throw;
             }
 
-            // Only the report file is written. Existing themes, catalog overrides and the
-            // attempt/backoff cache are never opened for writing by this scheduled task.
-            var path = Path.Combine(appPaths.PluginConfigurationsPath,
-                "ThemeMusicFinder.discovery-audit.json");
-            await ThemeDiscoveryAuditReport.WriteAtomicAsync(
-                path,
-                new ThemeDiscoveryAuditReport
-                {
-                    GeneratedAtUtc = DateTimeOffset.UtcNow,
-                    TotalSeriesScanned = items.Count,
-                    ExistingThemesSkipped = skippedExisting,
-                    MissingPathsSkipped = noPath,
-                    CandidateCount = chosen,
-                    RejectedCount = rejected,
-                    TransientCount = transient,
-                    NotApplicableCount = unavailable,
-                    Entries = output
-                },
-                cancellationToken).ConfigureAwait(false);
+            await SaveCheckpointAsync(true, cancellationToken).ConfigureAwait(false);
 
             progress?.Report(100);
             log.LogInformation(
@@ -193,7 +244,9 @@ internal sealed class ThemeDiscoveryAuditReport
         WriteIndented = true
     };
 
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = 2;
+    public bool Complete { get; init; } = true;
+    public string ScanSignature { get; init; } = string.Empty;
     public DateTimeOffset GeneratedAtUtc { get; init; }
     public int TotalSeriesScanned { get; init; }
     public int ExistingThemesSkipped { get; init; }
@@ -203,6 +256,25 @@ internal sealed class ThemeDiscoveryAuditReport
     public int TransientCount { get; init; }
     public int NotApplicableCount { get; init; }
     public required IReadOnlyList<ThemeDiscoveryAuditEntry> Entries { get; init; }
+
+    internal static async Task<ThemeDiscoveryAuditReport?> LoadIncompleteAsync(
+        string path, string signature, CancellationToken ct)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            await using var stream = File.OpenRead(path);
+            var report = await JsonSerializer.DeserializeAsync<ThemeDiscoveryAuditReport>(
+                stream, Options, ct).ConfigureAwait(false);
+            return report is { Complete: false, SchemaVersion: 2 }
+                && report.ScanSignature == signature
+                && report.Entries is not null
+                ? report : null;
+        }
+        catch (JsonException) { return null; }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
+    }
 
     internal static async Task WriteAtomicAsync(
         string path, ThemeDiscoveryAuditReport report, CancellationToken ct)
