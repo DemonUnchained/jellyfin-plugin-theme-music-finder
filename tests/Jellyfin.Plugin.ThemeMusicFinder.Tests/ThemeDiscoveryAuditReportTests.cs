@@ -57,6 +57,15 @@ public sealed class ThemeDiscoveryAuditReportTests
     }
 
     [Fact]
+    public void AuditTaskIsAvailableOnDemandButNeverSchedulesItself()
+    {
+        var task = new ThemeDiscoveryAuditScheduledTask(null!, null!, null!);
+        Assert.Contains("read only", task.Name);
+        Assert.Empty(task.GetDefaultTriggers());
+        Assert.Equal("ThemeMusicFinderAudit", task.Key);
+    }
+
+    [Fact]
     public void NewSourceWritesAreOptIn()
     {
         var config = new PluginConfiguration();
