@@ -33,6 +33,11 @@ public class PluginConfiguration : BasePluginConfiguration
     /// <summary>After exact-ID sources miss, autonomously search and score multiple theme candidates.</summary>
     public bool EnableAutomaticDiscovery { get; set; } = true;
 
+    /// <summary>Explicit opt-in for metadata-selected third-party sources to write theme.mp3.
+    /// False by default until a read-only whole-library audit has been reviewed. Existing
+    /// trusted ID-matched provider behavior is unchanged.</summary>
+    public bool EnableAutomaticDiscoveryWrites { get; set; } = false;
+
     /// <summary>Search SoundCloud for additional high-confidence theme recordings.</summary>
     public bool EnableSoundCloudDiscovery { get; set; } = true;
 
