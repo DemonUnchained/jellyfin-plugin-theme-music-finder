@@ -17,9 +17,17 @@ internal sealed class AutonomousThemeDiscoveryProvider(
     IThemeAudioDownloader downloader,
     ILibraryManager? libraryManager = null,
     bool enableSoundCloud = true,
-    bool enableBilibili = true) : IThemeProvider
+    bool enableBilibili = true,
+    string? executablePathOverride = null) : IThemeProvider
 {
-    private readonly string _executable = Path.Combine(appPaths.ProgramDataPath, "trailer-tools", "yt-dlp");
+    private readonly string _executable = executablePathOverride ??
+        Path.Combine(appPaths.ProgramDataPath, "trailer-tools", "yt-dlp");
+    // Injectable seams let tests run the entire discovery/decision/download orchestration
+    // without contacting live public services, making incorrect writes reproducible.
+    internal Func<string, string, CancellationToken, Task<IReadOnlyList<ThemeSearchVideo>>>? SearchOverride { get; init; }
+    internal Func<ThemeSearchVideo, CancellationToken, Task<ThemeSearchVideo>>? InspectOverride { get; init; }
+    internal Func<TimeSpan, CancellationToken, Task> DelayAsync { get; init; } = Task.Delay;
+
     private readonly HashSet<string> _sourceUnavailable = new(StringComparer.Ordinal);
     private bool _toolUnavailable;
 
@@ -56,12 +64,12 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             {
                 ct.ThrowIfCancellationRequested();
                 if (attemptedSearch)
-                    await Task.Delay(TimeSpan.FromMilliseconds(900), ct).ConfigureAwait(false);
+                    await DelayAsync(TimeSpan.FromMilliseconds(900), ct).ConfigureAwait(false);
                 attemptedSearch = true;
 
                 try
                 {
-                    foreach (var candidate in await SearchAsync(source, GetSourceQuery(source.Name, queries, i), ct).ConfigureAwait(false))
+                    foreach (var candidate in await SearchCandidateAsync(source, GetSourceQuery(source.Name, queries, i), ct).ConfigureAwait(false))
                     {
                         var key = source.Name + ":" + candidate.Id;
                         indexed[key] = indexed.TryGetValue(key, out var prior)
@@ -112,7 +120,7 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             ct.ThrowIfCancellationRequested();
             try
             {
-                var detail = await InspectAsync(provisional.Video, ct).ConfigureAwait(false);
+                var detail = await InspectCandidateAsync(provisional.Video, ct).ConfigureAwait(false);
                 var scored = ThemeCandidateDecisionEngine.Evaluate(
                     series.Name, series.OriginalTitle, series.ProductionYear, detail);
                 if (scored.Accepted)
@@ -192,6 +200,18 @@ internal sealed class AutonomousThemeDiscoveryProvider(
         }
         catch { return false; } // Applicability is an optimization, not a scan error.
     }
+
+    private Task<IReadOnlyList<ThemeSearchVideo>> SearchCandidateAsync(
+        SearchSource source, string query, CancellationToken ct)
+        => SearchOverride is null
+            ? SearchAsync(source, query, ct)
+            : SearchOverride(source.Name, query, ct);
+
+    private Task<ThemeSearchVideo> InspectCandidateAsync(
+        ThemeSearchVideo candidate, CancellationToken ct)
+        => InspectOverride is null
+            ? InspectAsync(candidate, ct)
+            : InspectOverride(candidate, ct);
 
     private async Task<IReadOnlyList<ThemeSearchVideo>> SearchAsync(
         SearchSource source, string query, CancellationToken ct)
