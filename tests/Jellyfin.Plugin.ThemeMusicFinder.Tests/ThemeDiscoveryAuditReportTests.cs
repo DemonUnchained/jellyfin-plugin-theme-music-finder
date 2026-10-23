@@ -57,6 +57,60 @@ public sealed class ThemeDiscoveryAuditReportTests
     }
 
     [Fact]
+    public async Task IncompleteAuditResumesOnlyWithMatchingLibrarySignature()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ThemeMusicFinderResume-" +
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var path = Path.Combine(root, "ThemeMusicFinder.discovery-audit.json");
+            var report = new ThemeDiscoveryAuditReport
+            {
+                Complete = false,
+                ScanSignature = "library-v2-abc",
+                GeneratedAtUtc = DateTimeOffset.UtcNow,
+                TotalSeriesScanned = 25,
+                CandidateCount = 1,
+                Entries =
+                [
+                    new ThemeDiscoveryAuditEntry(
+                        "Existing decision", null, 2023, null, null,
+                        "/media/TV/Existing decision", "candidate",
+                        "metadata-only candidate", "YouTube",
+                        "https://www.youtube.com/watch?v=abc123_XYZ9",
+                        "Existing decision theme", 99)
+                ]
+            };
+
+            await ThemeDiscoveryAuditReport.WriteAtomicAsync(path, report,
+                CancellationToken.None);
+            var resumed = await ThemeDiscoveryAuditReport.LoadIncompleteAsync(
+                path, "library-v2-abc", CancellationToken.None);
+            Assert.NotNull(resumed);
+            Assert.Single(resumed.Entries);
+            Assert.False(resumed.Complete);
+            Assert.Null(await ThemeDiscoveryAuditReport.LoadIncompleteAsync(
+                path, "changed-source-config", CancellationToken.None));
+
+            var completed = new ThemeDiscoveryAuditReport
+            {
+                Complete = true,
+                ScanSignature = "library-v2-abc",
+                GeneratedAtUtc = DateTimeOffset.UtcNow,
+                TotalSeriesScanned = 25,
+                CandidateCount = 1,
+                Entries = resumed.Entries
+            };
+            await ThemeDiscoveryAuditReport.WriteAtomicAsync(path, completed,
+                CancellationToken.None);
+            Assert.Null(await ThemeDiscoveryAuditReport.LoadIncompleteAsync(
+                path, "library-v2-abc", CancellationToken.None));
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [Fact]
     public void AuditTaskIsAvailableOnDemandButNeverSchedulesItself()
     {
         var task = new ThemeDiscoveryAuditScheduledTask(null!, null!, null!);
