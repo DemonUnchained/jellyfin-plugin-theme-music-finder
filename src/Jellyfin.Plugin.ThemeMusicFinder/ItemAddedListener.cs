@@ -112,7 +112,9 @@ public class ItemAddedListener(
                     config.EnableLoudnessNormalization ? audioProcessor : null));
                 if (config.EnableAutomaticDiscovery)
                 {
-                    providers.Add(new AutonomousYoutubeThemeProvider(appPaths, youtubeDownloader));
+                    providers.Add(new AutonomousThemeDiscoveryProvider(
+                        appPaths, youtubeDownloader, libraryManager,
+                        config.EnableSoundCloudDiscovery, config.EnableBilibiliDiscovery));
                 }
 
                 IThemeProvider provider = new CompositeThemeProvider([.. providers]);
