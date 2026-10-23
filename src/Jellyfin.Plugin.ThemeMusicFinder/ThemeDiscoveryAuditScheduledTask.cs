@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
