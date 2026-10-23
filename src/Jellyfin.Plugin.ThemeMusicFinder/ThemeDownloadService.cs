@@ -198,7 +198,8 @@ public class ThemeDownloadService(
         var tmdbId = series.GetProviderId(MetadataProvider.Tmdb);
         // No stable catalogue id is normal (e.g. YouTube channel "series") — not an error.
         if (string.IsNullOrEmpty(tvdbId) && string.IsNullOrEmpty(tmdbId)
-            && ThemeMusicFinderPlugin.Instance?.Configuration.EnableAutomaticDiscovery != true)
+            && (ThemeMusicFinderPlugin.Instance?.Configuration.EnableAutomaticDiscovery != true
+                || ThemeMusicFinderPlugin.Instance?.Configuration.EnableAutomaticDiscoveryWrites != true))
             return new ProcessResult(Outcome.Skipped, SkipReason.NoStableId);
         if (string.IsNullOrEmpty(series.Path))
             return new ProcessResult(Outcome.Skipped, SkipReason.MissingPath);
