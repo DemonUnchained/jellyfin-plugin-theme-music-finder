@@ -167,9 +167,13 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             }
         }
 
-        if (errors.Count > 0)
+        if (errors.Count > 0 || _sourceUnavailable.Count > 0)
             return ThemeFetchResult.Transient(
-                "autonomous discovery incomplete (retry next sweep): " + string.Join("; ", errors.Take(3)));
+                "autonomous discovery incomplete (retry next sweep): "
+                + (errors.Count > 0 ? string.Join("; ", errors.Take(3)) : "provider circuit open")
+                + (_sourceUnavailable.Count > 0
+                    ? "; temporarily unavailable: " + string.Join(", ", _sourceUnavailable)
+                    : ""));
 
         var topRejections = string.Join("; ",
             rejected.OrderByDescending(pair => pair.Value).Take(3)
