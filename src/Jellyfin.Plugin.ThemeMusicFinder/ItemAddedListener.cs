@@ -110,7 +110,7 @@ public class ItemAddedListener(
                 providers.Add(new PlexThemeProvider(
                     plexHttp,
                     config.EnableLoudnessNormalization ? audioProcessor : null));
-                if (config.EnableAutomaticDiscovery)
+                if (config.EnableAutomaticDiscovery && config.EnableAutomaticDiscoveryWrites)
                 {
                     providers.Add(new AutonomousThemeDiscoveryProvider(
                         appPaths, youtubeDownloader, libraryManager,
