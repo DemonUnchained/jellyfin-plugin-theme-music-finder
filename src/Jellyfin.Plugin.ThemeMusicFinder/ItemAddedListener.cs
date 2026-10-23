@@ -135,16 +135,13 @@ public class ItemAddedListener(
                 var service = new ThemeDownloadService(
                     libraryManager, providerManager, provider, store, fileSystem,
                     loggerFactory.CreateLogger<ThemeDownloadService>(),
-                    attemptKeySuffixProvider: sourceOverrides.Mappings.Count == 0
-                                              && animeTitleOverrides is null
-                        ? null
-                        : seriesItem => AttemptKeySuffix.Combine(
-                            sourceOverrides.GetCacheSuffix(seriesItem),
-                            animeTitleOverrides is null
-                                ? null
-                                : AnimeThemesProvider.GetOverrideCacheSuffix(
-                                    seriesItem,
-                                    animeTitleOverrides.Mappings)));
+                    attemptKeySuffixProvider: seriesItem => AttemptKeySuffix.Combine(
+                        sourceOverrides.GetCacheSuffix(seriesItem),
+                        animeTitleOverrides is null
+                            ? null
+                            : AnimeThemesProvider.GetOverrideCacheSuffix(
+                                seriesItem, animeTitleOverrides.Mappings),
+                        AttemptKeySuffix.Discovery(config)));
 
                 var outcome = ThemeDownloadService.Outcome.Skipped;
                 try
