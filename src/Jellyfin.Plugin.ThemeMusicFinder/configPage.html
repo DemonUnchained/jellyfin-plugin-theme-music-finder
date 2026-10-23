@@ -29,6 +29,14 @@
         <div class="fieldDescription">Requests are limited to anime-named libraries and series tagged Animation or Anime when Jellyfin knows the library placement.</div>
       </label>
       <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableSoundCloudDiscovery" />
+        <span>Include SoundCloud in automatic discovery</span>
+      </label>
+      <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableBilibiliDiscovery" />
+        <span>Include Bilibili searches for anime</span>
+      </label>
+      <label class="checkboxContainer">
         <input is="emby-checkbox" type="checkbox" id="EnableLoudnessNormalization" />
         <span>Normalize newly downloaded themes</span>
       </label>
@@ -98,6 +106,8 @@
         document.querySelector('#EnableThemerrFallback').checked = config.EnableThemerrFallback !== false;
         document.querySelector('#EnableAnimeThemes').checked = config.EnableAnimeThemes !== false;
         document.querySelector('#EnableAutomaticDiscovery').checked = config.EnableAutomaticDiscovery !== false;
+        document.querySelector('#EnableSoundCloudDiscovery').checked = config.EnableSoundCloudDiscovery !== false;
+        document.querySelector('#EnableBilibiliDiscovery').checked = config.EnableBilibiliDiscovery !== false;
         document.querySelector('#EnableLoudnessNormalization').checked = config.EnableLoudnessNormalization !== false;
         document.querySelector('#NormalizationTargetLufs').value = config.NormalizationTargetLufs || -18;
         Dashboard.hideLoadingMsg();
@@ -118,6 +128,8 @@
         config.EnableThemerrFallback = document.querySelector('#EnableThemerrFallback').checked;
         config.EnableAnimeThemes = document.querySelector('#EnableAnimeThemes').checked;
         config.EnableAutomaticDiscovery = document.querySelector('#EnableAutomaticDiscovery').checked;
+        config.EnableSoundCloudDiscovery = document.querySelector('#EnableSoundCloudDiscovery').checked;
+        config.EnableBilibiliDiscovery = document.querySelector('#EnableBilibiliDiscovery').checked;
         config.EnableLoudnessNormalization = document.querySelector('#EnableLoudnessNormalization').checked;
         var targetLufs = parseFloat(document.querySelector('#NormalizationTargetLufs').value);
         config.NormalizationTargetLufs = isNaN(targetLufs) ? -18 : Math.max(-24, Math.min(-12, targetLufs));
