@@ -55,6 +55,24 @@ public sealed class AutonomousThemeDiscoveryProviderTests
     }
 
     [Fact]
+    public void AllowsKnownSoundCloudApiTrackOrigin()
+    {
+        Assert.True(AutonomousThemeDiscoveryProvider.IsAllowedUri(
+            "SoundCloud", new Uri("https://api-v2.soundcloud.com/tracks/12345")));
+    }
+
+    [Fact]
+    public void AdditionalSourcesPreferOriginalLanguageAlternative()
+    {
+        var queries = ThemeCandidateDecisionEngine.BuildQueries(
+            "Localized Title", "Original Japanese Title", 2023);
+        Assert.Equal(queries[2], AutonomousThemeDiscoveryProvider.GetSourceQuery(
+            "Bilibili", queries, 1));
+        Assert.Equal(queries[1], AutonomousThemeDiscoveryProvider.GetSourceQuery(
+            "YouTube", queries, 1));
+    }
+
+    [Fact]
     public void DoesNotAcceptCrossSourceRedirect()
     {
         Assert.False(AutonomousThemeDiscoveryProvider.IsAllowedUri(
