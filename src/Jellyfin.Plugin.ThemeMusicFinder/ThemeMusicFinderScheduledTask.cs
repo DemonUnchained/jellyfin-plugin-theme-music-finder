@@ -100,7 +100,9 @@ public class ThemeMusicFinderScheduledTask(
             if (config.EnableAutomaticDiscovery)
             {
                 AddProvider("Autonomous YouTube discovery",
-                    new AutonomousYoutubeThemeProvider(appPaths, youtubeDownloader));
+                    new AutonomousThemeDiscoveryProvider(
+                        appPaths, youtubeDownloader, libraryManager,
+                        config.EnableSoundCloudDiscovery, config.EnableBilibiliDiscovery));
             }
 
             IThemeProvider provider = new CompositeThemeProvider([.. providers]);
