@@ -61,7 +61,7 @@ internal sealed class AutonomousThemeDiscoveryProvider(
 
                 try
                 {
-                    foreach (var candidate in await SearchAsync(source, queries[i], ct).ConfigureAwait(false))
+                    foreach (var candidate in await SearchAsync(source, GetSourceQuery(source.Name, queries, i), ct).ConfigureAwait(false))
                     {
                         var key = source.Name + ":" + candidate.Id;
                         indexed[key] = indexed.TryGetValue(key, out var prior)
@@ -171,6 +171,13 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             + " candidates but found no verified theme"
             + (topRejections.Length > 0 ? "; rejected: " + topRejections : ""));
     }
+
+    // The second alternative-source search should try an original-language title if one
+    // exists. This matters particularly for Japanese names on Bilibili and SoundCloud.
+    internal static string GetSourceQuery(string source, IReadOnlyList<string> queries, int index)
+        => source != "YouTube" && index == 1 && queries.Count >= 3
+            ? queries[2]
+            : queries[index];
 
     private bool IsLikelyAnime(Series series)
     {
@@ -345,7 +352,8 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             "YouTube" => host is "youtube.com" or "www.youtube.com" or "m.youtube.com"
                 or "youtu.be",
             "SoundCloud" => host is "soundcloud.com" or "www.soundcloud.com"
-                or "api.soundcloud.com",
+                or "m.soundcloud.com" or "api.soundcloud.com"
+                or "api-v2.soundcloud.com",
             "Bilibili" => host is "bilibili.com" or "www.bilibili.com"
                 or "m.bilibili.com",
             _ => false
