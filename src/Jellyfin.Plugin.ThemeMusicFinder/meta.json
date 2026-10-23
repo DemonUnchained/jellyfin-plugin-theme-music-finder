@@ -6,7 +6,7 @@
   "name": "Theme Music Finder",
   "overview": "Finds missing TV series theme music and saves it as theme.mp3.",
   "owner": "DemonUnchained",
-  "targetAbi": "12.1.0.0",
+  "targetAbi": "12.3.0.0",
   "timestamp": "2026-10-23T13:00:00Z",
   "version": "1.2.2.0",
   "status": "Active",
