@@ -97,6 +97,7 @@
         document.querySelector('#EnableItemAddedHook').checked = config.EnableItemAddedHook;
         document.querySelector('#EnableThemerrFallback').checked = config.EnableThemerrFallback !== false;
         document.querySelector('#EnableAnimeThemes').checked = config.EnableAnimeThemes !== false;
+        document.querySelector('#EnableAutomaticDiscovery').checked = config.EnableAutomaticDiscovery !== false;
         document.querySelector('#EnableLoudnessNormalization').checked = config.EnableLoudnessNormalization !== false;
         document.querySelector('#NormalizationTargetLufs').value = config.NormalizationTargetLufs || -18;
         Dashboard.hideLoadingMsg();
@@ -116,6 +117,7 @@
         config.EnableItemAddedHook = document.querySelector('#EnableItemAddedHook').checked;
         config.EnableThemerrFallback = document.querySelector('#EnableThemerrFallback').checked;
         config.EnableAnimeThemes = document.querySelector('#EnableAnimeThemes').checked;
+        config.EnableAutomaticDiscovery = document.querySelector('#EnableAutomaticDiscovery').checked;
         config.EnableLoudnessNormalization = document.querySelector('#EnableLoudnessNormalization').checked;
         var targetLufs = parseFloat(document.querySelector('#NormalizationTargetLufs').value);
         config.NormalizationTargetLufs = isNaN(targetLufs) ? -18 : Math.max(-24, Math.min(-12, targetLufs));
