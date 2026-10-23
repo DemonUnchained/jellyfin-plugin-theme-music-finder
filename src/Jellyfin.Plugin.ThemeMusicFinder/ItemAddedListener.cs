@@ -110,6 +110,11 @@ public class ItemAddedListener(
                 providers.Add(new PlexThemeProvider(
                     plexHttp,
                     config.EnableLoudnessNormalization ? audioProcessor : null));
+                if (config.EnableAutomaticDiscovery)
+                {
+                    providers.Add(new AutonomousYoutubeThemeProvider(appPaths, youtubeDownloader));
+                }
+
                 IThemeProvider provider = new CompositeThemeProvider([.. providers]);
 
                 var store = new AttemptStore(
