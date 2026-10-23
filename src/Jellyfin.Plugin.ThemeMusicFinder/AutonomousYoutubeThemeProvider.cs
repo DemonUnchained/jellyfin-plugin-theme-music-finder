@@ -18,7 +18,8 @@ internal sealed class AutonomousThemeDiscoveryProvider(
     ILibraryManager? libraryManager = null,
     bool enableSoundCloud = true,
     bool enableBilibili = true,
-    string? executablePathOverride = null) : IThemeProvider
+    string? executablePathOverride = null,
+    bool auditOnly = false) : IThemeProvider
 {
     private readonly string _executable = executablePathOverride ??
         Path.Combine(appPaths.ProgramDataPath, "trailer-tools", "yt-dlp");
@@ -150,6 +151,13 @@ internal sealed class AutonomousThemeDiscoveryProvider(
         if (ranked.Count > 0)
         {
             var winner = ranked[0];
+            if (auditOnly)
+                return ThemeFetchResult.PreviewCandidate(
+                    winner.Video.Source,
+                    winner.Video.Url!,
+                    winner.Video.Title,
+                    winner.Score,
+                    winner.Reason + "; metadata-only selection; audio not checked or downloaded");
             try
             {
                 var bytes = await downloader.DownloadMp3Async(winner.Video.Url!, ct).ConfigureAwait(false);
