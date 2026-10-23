@@ -11,10 +11,11 @@ description: >
   fallback, then Plex by TVDB ID, followed by conservative multi-source searches
   from YouTube, SoundCloud, and anime Bilibili. New downloads are normalized, validated,
   written atomically, and followed by a Jellyfin item refresh. Existing
-  theme.mp3 files are never overwritten.
+  theme.mp3 files are never overwritten. Autonomous source writes are opt-in,
+  and a read-only whole-library discovery audit is provided.
 category: "Metadata"
 owner: "DemonUnchained"
 artifacts:
   - "Jellyfin.Plugin.ThemeMusicFinder.dll"
   - "YoutubeExplode.dll"
-changelog: "Adds conservative automated theme discovery across YouTube, SoundCloud, and anime Bilibili with strict candidate verification and automatic backoff invalidation on upgrade."
+changelog: "Adds Jellyfin 12.3 support, autonomous multi-source matching, a read-only full-library audit task, and explicit opt-in for automatic installation of newly discovered audio."
