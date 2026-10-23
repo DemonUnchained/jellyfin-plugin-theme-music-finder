@@ -214,3 +214,21 @@ Searches are bounded and respect existing theme files, confirmed-miss backoff, c
 source-specific failures, and network timeouts. Extra discovery sources do not require manual
 batches of stable-ID overrides but depend on yt-dlp and their providers remaining accessible.
 End-to-end validation on a controlled Jellyfin test library remains required before release.
+
+## Whole-library, read-only discovery audit (development)
+
+Run **Dashboard → Scheduled Tasks → Theme Music Finder → Audit automatic theme discovery (read only)**.
+This runs automatically through all physical TV series missing `theme.mp3` and writes
+`/config/plugins/configurations/ThemeMusicFinder.discovery-audit.json` (with Jellyfin's
+actual plugin configuration directory used on non-container systems).
+The JSON contains each evaluated series, TVDB/TMDB identifiers, title, year, candidate
+source and URL, score, rejection/ambiguity reason, and transient error classification.
+**It does not download music, touch existing themes, or alter attempts/backoff history.**
+The task is manual-on-demand rather than nightly by default to avoid doubling API requests.
+
+**New-source automatic writing is disabled by default** via
+`EnableAutomaticDiscoveryWrites=false` until audit results have been assessed. The
+existing exact-ID ThemerrDB, AnimeThemes, and Plex download chain remains operational.
+After enabling automatic discovery writes, the nightly task and item-added listener
+use the same confidence-scored rules. The sources are metadata evidence only—not
+acoustic recognition. No guaranteed-correct audio assertion is made.
