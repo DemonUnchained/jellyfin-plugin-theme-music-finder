@@ -108,6 +108,33 @@ jobs:
           fi
           docker logs theme-plugin-smoke 2>&1 | grep -iE \
             'Loaded plugin.*Theme Music Finder|Loaded plugin.*ThemeMusicFinder' | tail -n 5
+      - name: Restart Jellyfin and verify plugin persistence
+        shell: bash
+        run: |
+          set -euo pipefail
+          loaded_before="$(docker logs theme-plugin-smoke 2>&1 | grep -icE \
+            'Loaded plugin.*Theme Music Finder|Loaded plugin.*ThemeMusicFinder' || true)"
+          docker restart theme-plugin-smoke >/dev/null
+          reloaded=0
+          for i in $(seq 1 75); do
+            loaded_after="$(docker logs theme-plugin-smoke 2>&1 | grep -icE \
+              'Loaded plugin.*Theme Music Finder|Loaded plugin.*ThemeMusicFinder' || true)"
+            if [[ "$loaded_after" -gt "$loaded_before" ]]; then
+              reloaded=1
+              break
+            fi
+            if ! docker inspect -f '{{.State.Running}}' theme-plugin-smoke | grep -q true; then
+              echo "Jellyfin exited on restart" >&2
+              exit 1
+            fi
+            sleep 2
+          done
+          if [[ "$reloaded" -ne 1 ]]; then
+            echo "Plugin did not reload after Jellyfin restarted" >&2
+            exit 1
+          fi
+          test -f "$RUNNER_TEMP/jellyfin-smoke/config/plugins/Theme Music Finder_1.2.2.0/Jellyfin.Plugin.ThemeMusicFinder.dll"
+          echo "Theme Music Finder survived restart and was loaded again"
       - name: Show diagnostics on failure
         if: failure()
         run: docker logs theme-plugin-smoke 2>&1 | tail -n 180 || true
