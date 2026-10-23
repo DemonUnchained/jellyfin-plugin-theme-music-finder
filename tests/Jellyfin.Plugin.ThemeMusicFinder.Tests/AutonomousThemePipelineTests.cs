@@ -34,6 +34,68 @@ public sealed class AutonomousThemePipelineTests
     }
 
     [Fact]
+    public async Task AuditOnlyReturnsWinnerWithoutDownloadingAudio()
+    {
+        var marker = Marker();
+        try
+        {
+            var downloader = new FakeThemeAudioDownloader(_ =>
+                throw new InvalidOperationException("Audit must never call a downloader"));
+            var selected = Candidate("abc123_XYZ9",
+                "The Enfield Poltergeist (2023) TV main title theme");
+
+            var provider = new AutonomousThemeDiscoveryProvider(
+                null!, downloader, enableSoundCloud: false, enableBilibili: false,
+                executablePathOverride: marker, auditOnly: true)
+            {
+                DelayAsync = (_, _) => Task.CompletedTask,
+                SearchOverride = (_, _, _) =>
+                    Task.FromResult<IReadOnlyList<ThemeSearchVideo>>([selected]),
+                InspectOverride = (video, _) => Task.FromResult(video)
+            };
+
+            var result = await provider.FetchAsync(Show(), CancellationToken.None);
+            Assert.Equal(ThemeFetchStatus.Preview, result.Status);
+            Assert.Null(result.Body);
+            Assert.Equal(selected.Url, result.SourceUri);
+            Assert.Equal(selected.Title, result.CandidateTitle);
+            Assert.True(result.ConfidenceScore >= ThemeCandidateDecisionEngine.MinimumAutomaticScore);
+            Assert.Empty(downloader.Requested);
+        }
+        finally { File.Delete(marker); }
+    }
+
+    [Fact]
+    public async Task AuditOnlyDoesNotDownloadAmbiguousMatches()
+    {
+        var marker = Marker();
+        try
+        {
+            var downloader = new FakeThemeAudioDownloader(_ =>
+                throw new InvalidOperationException("Never download in audit mode"));
+            var a = Candidate("abc123_XYZ9",
+                "The Enfield Poltergeist (2023) TV main title theme");
+            var b = Candidate("abc123_XYZ8",
+                "The Enfield Poltergeist (2023) TV main title theme");
+            var provider = new AutonomousThemeDiscoveryProvider(
+                null!, downloader, enableSoundCloud: false, enableBilibili: false,
+                executablePathOverride: marker, auditOnly: true)
+            {
+                DelayAsync = (_, _) => Task.CompletedTask,
+                SearchOverride = (_, _, _) =>
+                    Task.FromResult<IReadOnlyList<ThemeSearchVideo>>([a, b]),
+                InspectOverride = (video, _) => Task.FromResult(video)
+            };
+
+            var result = await provider.FetchAsync(Show(), CancellationToken.None);
+            Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
+            Assert.Contains("competing", result.Reason);
+            Assert.Empty(downloader.Requested);
+        }
+        finally { File.Delete(marker); }
+    }
+
+    [Fact]
     public async Task VerifiedSingleWinnerDownloadsOnce()
     {
         var marker = Marker();
