@@ -29,6 +29,11 @@
         <div class="fieldDescription">Requests are limited to anime-named libraries and series tagged Animation or Anime when Jellyfin knows the library placement.</div>
       </label>
       <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableAutomaticDiscoveryWrites" />
+        <span>Allow automatically discovered music to be installed</span>
+        <div class="fieldDescription">Disabled by default. First run Scheduled Tasks → Theme Music Finder → Audit automatic theme discovery (read only), and inspect ThemeMusicFinder.discovery-audit.json. No metadata-only match can guarantee that the recording is the correct theme.</div>
+      </label>
+      <label class="checkboxContainer">
         <input is="emby-checkbox" type="checkbox" id="EnableSoundCloudDiscovery" />
         <span>Include SoundCloud in automatic discovery</span>
       </label>
@@ -55,6 +60,7 @@
           and optionally the moment a series is added. Run it any time from
           Dashboard &rarr; Scheduled Tasks.
         </p>
+        <p class="fieldDescription">Run the on-demand <strong>Audit automatic theme discovery (read only)</strong> scheduled task first. It evaluates the full missing-theme library without downloading or writing audio, then writes <code>ThemeMusicFinder.discovery-audit.json</code>. Only turn on automatic source writes after a successful audit.</p>
         <p class="fieldDescription">For each series:</p>
         <ol class="fieldDescription">
           <li>Skip if a <code>theme.mp3</code> is already there.</li>
@@ -106,6 +112,7 @@
         document.querySelector('#EnableThemerrFallback').checked = config.EnableThemerrFallback !== false;
         document.querySelector('#EnableAnimeThemes').checked = config.EnableAnimeThemes !== false;
         document.querySelector('#EnableAutomaticDiscovery').checked = config.EnableAutomaticDiscovery !== false;
+        document.querySelector('#EnableAutomaticDiscoveryWrites').checked = config.EnableAutomaticDiscoveryWrites === true;
         document.querySelector('#EnableSoundCloudDiscovery').checked = config.EnableSoundCloudDiscovery !== false;
         document.querySelector('#EnableBilibiliDiscovery').checked = config.EnableBilibiliDiscovery !== false;
         document.querySelector('#EnableLoudnessNormalization').checked = config.EnableLoudnessNormalization !== false;
@@ -128,6 +135,7 @@
         config.EnableThemerrFallback = document.querySelector('#EnableThemerrFallback').checked;
         config.EnableAnimeThemes = document.querySelector('#EnableAnimeThemes').checked;
         config.EnableAutomaticDiscovery = document.querySelector('#EnableAutomaticDiscovery').checked;
+        config.EnableAutomaticDiscoveryWrites = document.querySelector('#EnableAutomaticDiscoveryWrites').checked;
         config.EnableSoundCloudDiscovery = document.querySelector('#EnableSoundCloudDiscovery').checked;
         config.EnableBilibiliDiscovery = document.querySelector('#EnableBilibiliDiscovery').checked;
         config.EnableLoudnessNormalization = document.querySelector('#EnableLoudnessNormalization').checked;
