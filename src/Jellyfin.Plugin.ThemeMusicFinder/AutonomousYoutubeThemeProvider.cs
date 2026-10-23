@@ -247,6 +247,8 @@ internal sealed class AutonomousThemeDiscoveryProvider(
         var root = doc.RootElement;
         if (root.ValueKind != JsonValueKind.Object)
             throw new InvalidDataException("Candidate inspection returned no metadata");
+        if (!IsSameCandidate(video, root))
+            throw new InvalidDataException("Candidate identity changed between search and full inspection");
 
         var title = String(root, "title");
         var seconds = Number(root, "duration");
@@ -317,6 +319,16 @@ internal sealed class AutonomousThemeDiscoveryProvider(
         if (output.Length > 2_000_000)
             throw new InvalidDataException("yt-dlp returned unusually large metadata");
         return output;
+    }
+
+    internal static bool IsSameCandidate(ThemeSearchVideo selected, JsonElement details)
+    {
+        var detailId = String(details, "id");
+        // A search result must not silently redirect to another same-host recording.
+        // If metadata supplies a stable identity, it must match the shortlisted identity.
+        return !string.IsNullOrWhiteSpace(detailId)
+            && !string.IsNullOrWhiteSpace(selected.Id)
+            && string.Equals(detailId, selected.Id, StringComparison.Ordinal);
     }
 
     internal static IReadOnlyList<ThemeSearchVideo> ParseSearchOutput(string output, string source)
