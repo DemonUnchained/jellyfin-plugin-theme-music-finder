@@ -124,16 +124,14 @@ public class ThemeMusicFinderScheduledTask(
                 libraryManager, providerManager, provider, store, fileSystem,
                 loggerFactory.CreateLogger<ThemeDownloadService>(),
                 Path.Combine(appPaths.PluginConfigurationsPath, "ThemeMusicFinder.missing-themes.json"),
-                sourceOverrides.Mappings.Count == 0 && animeTitleOverrides is null
-                    ? null
-                    : new Func<Series, string?>(series =>
-                        AttemptKeySuffix.Combine(
-                            sourceOverrides.GetCacheSuffix(series),
-                            animeTitleOverrides is null
-                                ? null
-                                : AnimeThemesProvider.GetOverrideCacheSuffix(
-                                    series,
-                                    animeTitleOverrides.Mappings))));
+                new Func<Series, string?>(series =>
+                    AttemptKeySuffix.Combine(
+                        sourceOverrides.GetCacheSuffix(series),
+                        animeTitleOverrides is null
+                            ? null
+                            : AnimeThemesProvider.GetOverrideCacheSuffix(
+                                series, animeTitleOverrides.Mappings),
+                        AttemptKeySuffix.Discovery(config))));
 
             var written = await service.RunAsync(progress, cancellationToken).ConfigureAwait(false);
             foreach (var measured in measuredProviders) measured.Log(taskLogger);
