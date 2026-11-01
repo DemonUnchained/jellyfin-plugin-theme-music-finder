@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Adds the published 1.2.2.2 ZIP to the plugin catalog for Jellyfin 12.4 / ABI
+  12.4.0.0, preserving every existing 12.1 catalog entry. Catalog synchronization
+  explicitly allowlists only this prerelease. The release ZIP is unchanged and
+  `EnableAutomaticDiscoveryWrites=false` remains the default.
 - Corrects README installation paths, ZIP names, ABI and prerelease status for
   the current development preview, keeping stable/catalog 1.2.1.9 / 12.1 separate.
   Documents the private-SDK handoff build and the default discovery write gate;

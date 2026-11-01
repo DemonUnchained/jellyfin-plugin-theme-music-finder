@@ -16,8 +16,10 @@ This development build targets Jellyfin 12.4 / ABI 12.4.0.0 and .NET 10.
 | Development audit preview (prerelease) | 1.2.2.2 | 12.4.0.0 |
 | Stable/catalog (separate artifact) | 1.2.1.9 | 12.1.0.0 |
 
-The preview is not a catalog promotion or a package for Jellyfin 12.1. The
-curated provider chain works without `yt-dlp`, cookies, an API key, or an extra
+The catalog offers 1.2.2.2 for Jellyfin 12.4 and retains the separate 1.2.1.9
+artifact for Jellyfin 12.1. GitHub v1.2.2.2 remains a prerelease; the catalog
+explicitly admits this version with ABI 12.4.0.0 while excluding other previews.
+The curated provider chain works without `yt-dlp`, cookies, an API key, or an extra
 container; autonomous discovery requires `yt-dlp`. Discovery is enabled in
 configuration (`EnableAutomaticDiscovery=true`), but **new-source automatic
 writing is disabled by default** (`EnableAutomaticDiscoveryWrites=false`).
