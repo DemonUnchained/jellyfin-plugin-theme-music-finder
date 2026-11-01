@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Security.Cryptography;
-using System.Text;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Entities;
@@ -60,15 +59,9 @@ public sealed class ThemeDiscoveryAuditScheduledTask(
                 IsVirtualItem = false
             }).OfType<Series>().ToList();
 
-            // Stable across restarts, but invalidated when show identities or the enabled
-            // alternative sources change. A completed audit always starts fresh.
-            var signatureInput = string.Join("\n", items
-                .OrderBy(series => series.Path, StringComparer.Ordinal)
-                .Select(series => series.Path + "|" + series.Name + "|" + series.ProductionYear))
-                + "|soundcloud:" + config.EnableSoundCloudDiscovery
-                + "|bilibili:" + config.EnableBilibiliDiscovery;
-            var signature = Convert.ToHexStringLower(
-                SHA256.HashData(Encoding.UTF8.GetBytes(signatureInput)));
+            // Stable across restarts, but invalidated when matching inputs, source scope,
+            // or discovery rules change. A completed audit always starts fresh.
+            var signature = CreateScanSignature(items, config, discovery.IsLikelyAnime);
 
             var path = Path.Combine(appPaths.PluginConfigurationsPath,
                 "ThemeMusicFinder.discovery-audit.json");
@@ -82,7 +75,7 @@ public sealed class ThemeDiscoveryAuditScheduledTask(
                 .ToHashSet(StringComparer.Ordinal);
             var output = previous?.Entries
                 .Where(entry => activePaths.Contains(entry.Path)
-                    && entry.Status is not ("transient" or "candidate-unavailable"))
+                    && entry.Status is "candidate" or "rejected")
                 .ToList() ?? [];
             var visited = output.Select(entry => entry.Path)
                 .ToHashSet(StringComparer.Ordinal);
@@ -195,6 +188,8 @@ public sealed class ThemeDiscoveryAuditScheduledTask(
                     if (newEvaluations % 10 == 0)
                         await SaveCheckpointAsync(false, cancellationToken).ConfigureAwait(false);
                 }
+
+                await SaveCheckpointAsync(true, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -212,8 +207,6 @@ public sealed class ThemeDiscoveryAuditScheduledTask(
                 throw;
             }
 
-            await SaveCheckpointAsync(true, cancellationToken).ConfigureAwait(false);
-
             progress?.Report(100);
             log.LogInformation(
                 "Read-only discovery audit complete: {Total} series, {Existing} existing theme(s), "
@@ -226,6 +219,32 @@ public sealed class ThemeDiscoveryAuditScheduledTask(
         {
             ThemeMusicFinderGate.AttemptsFile.Release();
         }
+    }
+
+    internal static string CreateScanSignature(
+        IEnumerable<Series> items, PluginConfiguration config, Func<Series, bool> isLikelyAnime,
+        string rulesRevision = AutonomousThemeDiscoveryProvider.AuditRulesRevision)
+    {
+        // JSON preserves field boundaries and invariant numbers even when metadata contains
+        // separators/newlines. Sort whole identities so library enumeration order is irrelevant.
+        var identities = items.Select(series => JsonSerializer.Serialize(new
+        {
+            series.Path,
+            series.Name,
+            series.OriginalTitle,
+            series.ProductionYear,
+            TvdbId = series.GetProviderId(MetadataProvider.Tvdb),
+            TmdbId = series.GetProviderId(MetadataProvider.Tmdb),
+            IsAnime = isLikelyAnime(series)
+        })).Order(StringComparer.Ordinal).ToArray();
+        var input = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            RulesRevision = rulesRevision,
+            config.EnableSoundCloudDiscovery,
+            config.EnableBilibiliDiscovery,
+            Items = identities
+        });
+        return Convert.ToHexStringLower(SHA256.HashData(input));
     }
 
     private sealed class RejectAuditDownloader : IThemeAudioDownloader

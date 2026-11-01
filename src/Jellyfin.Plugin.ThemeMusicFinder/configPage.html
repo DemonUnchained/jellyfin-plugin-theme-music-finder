@@ -29,6 +29,11 @@
         <div class="fieldDescription">Requests are limited to anime-named libraries and series tagged Animation or Anime when Jellyfin knows the library placement.</div>
       </label>
       <label class="checkboxContainer">
+        <input is="emby-checkbox" type="checkbox" id="EnableAutomaticDiscovery" />
+        <span>Enable autonomous discovery for normal tasks</span>
+        <div class="fieldDescription">Normal tasks also require the separate installation opt-in below. The manual read-only audit runs independently of these two switches.</div>
+      </label>
+      <label class="checkboxContainer">
         <input is="emby-checkbox" type="checkbox" id="EnableAutomaticDiscoveryWrites" />
         <span>Allow automatically discovered music to be installed</span>
         <div class="fieldDescription">Disabled by default. First run Scheduled Tasks → Theme Music Finder → Audit automatic theme discovery (read only), and inspect ThemeMusicFinder.discovery-audit.json. No metadata-only match can guarantee that the recording is the correct theme.</div>
@@ -60,13 +65,13 @@
           and optionally the moment a series is added. Run it any time from
           Dashboard &rarr; Scheduled Tasks.
         </p>
-        <p class="fieldDescription">Run the on-demand <strong>Audit automatic theme discovery (read only)</strong> scheduled task first. It evaluates the full missing-theme library without downloading or writing audio, then writes <code>ThemeMusicFinder.discovery-audit.json</code>. Only turn on automatic source writes after a successful audit.</p>
+        <p class="fieldDescription">Run the on-demand <strong>Audit automatic theme discovery (read only)</strong> scheduled task first. It evaluates the full missing-theme library without downloading or writing audio, then writes <code>ThemeMusicFinder.discovery-audit.json</code>. Review the candidate evidence before allowing automatic source writes; a completed audit does not prove that its selected music is correct.</p>
         <p class="fieldDescription">For each series:</p>
         <ol class="fieldDescription">
           <li>Skip if a <code>theme.mp3</code> is already there.</li>
           <li>Read its TVDB and TMDB IDs from Jellyfin metadata.</li>
           <li>Skip if it failed recently (see the retry interval).</li>
-          <li>Try an exact stable-ID source override, ThemerrDB by TMDB ID, AnimeThemes by exact title and year, then Plex by TVDB ID. If those sources miss, search YouTube, SoundCloud, and anime-only Bilibili, inspect metadata and refuse uncertain matches.</li>
+          <li>Try an exact stable-ID source override, ThemerrDB by TMDB ID, AnimeThemes by exact title and year, then Plex by TVDB ID. If those sources miss and both discovery and automatic source installation are enabled, search YouTube, SoundCloud, and anime-only Bilibili, inspect metadata and refuse uncertain matches.</li>
           <li>Download, throttled to about one series per second.</li>
           <li>Normalize new downloads to the configured loudness target.</li>
           <li>Validate it is a real MP3 &mdash; a missing theme returns an error page, not a 404.</li>

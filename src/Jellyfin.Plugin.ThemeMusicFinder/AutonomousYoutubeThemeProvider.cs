@@ -21,6 +21,10 @@ internal sealed class AutonomousThemeDiscoveryProvider(
     string? executablePathOverride = null,
     bool auditOnly = false) : IThemeProvider
 {
+    // Bump when discovery queries, scoring, validation, or source applicability rules change.
+    // Audit checkpoints must never retain decisions made under older matching rules.
+    internal const string AuditRulesRevision = "discovery-audit-v2";
+
     private readonly string _executable = executablePathOverride ??
         Path.Combine(appPaths.ProgramDataPath, "trailer-tools", "yt-dlp");
     // Injectable seams let tests run the entire discovery/decision/download orchestration
@@ -40,6 +44,7 @@ internal sealed class AutonomousThemeDiscoveryProvider(
 
     public async Task<ThemeFetchResult> FetchAsync(Series series, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (_toolUnavailable || !File.Exists(_executable))
             return ThemeFetchResult.NotApplicable("Autonomous discovery needs the installed yt-dlp tool");
 
@@ -48,9 +53,10 @@ internal sealed class AutonomousThemeDiscoveryProvider(
         if (queries.Count == 0)
             return ThemeFetchResult.NotApplicable("series has no searchable title");
 
+        var isAnime = IsLikelyAnime(series);
         var sources = new List<SearchSource> { new("YouTube", "ytsearch", 3) };
         if (enableSoundCloud) sources.Add(new("SoundCloud", "scsearch", 2));
-        if (enableBilibili && IsLikelyAnime(series))
+        if (enableBilibili && isAnime)
             sources.Add(new("Bilibili", "bilisearch", 2));
 
         var indexed = new Dictionary<string, ThemeSearchVideo>(StringComparer.Ordinal);
@@ -100,7 +106,7 @@ internal sealed class AutonomousThemeDiscoveryProvider(
                 series.Name, series.OriginalTitle, video.Title))
             .Select(video => ThemeCandidateDecisionEngine.Evaluate(
                 series.Name, series.OriginalTitle, series.ProductionYear,
-                video with { Duration = video.Duration ?? TimeSpan.FromSeconds(90) }))
+                video with { Duration = video.Duration ?? TimeSpan.FromSeconds(90) }, isAnime))
             .Where(result =>
             {
                 if (result.Accepted) return true;
@@ -116,6 +122,7 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             .ToList();
 
         var verified = new List<ScoredThemeVideo>();
+        var inspectionFailed = false;
         foreach (var provisional in preliminary)
         {
             ct.ThrowIfCancellationRequested();
@@ -123,7 +130,7 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             {
                 var detail = await InspectCandidateAsync(provisional.Video, ct).ConfigureAwait(false);
                 var scored = ThemeCandidateDecisionEngine.Evaluate(
-                    series.Name, series.OriginalTitle, series.ProductionYear, detail);
+                    series.Name, series.OriginalTitle, series.ProductionYear, detail, isAnime);
                 if (scored.Accepted)
                     verified.Add(scored);
                 else
@@ -132,9 +139,16 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
+                inspectionFailed = true;
                 errors.Add("inspect " + provisional.Video.Source + ": " + Trim(ex.Message));
             }
         }
+
+        // An uninspected competing hit could change the winner. An outage is not evidence
+        // that the remaining candidate is unambiguous, in either audit or writing mode.
+        if (inspectionFailed)
+            return ThemeFetchResult.Transient("autonomous candidate inspection incomplete: "
+                + string.Join("; ", errors.Take(3)));
 
         var ranked = verified
             .OrderByDescending(result => result.Score)
@@ -145,8 +159,9 @@ internal sealed class AutonomousThemeDiscoveryProvider(
         // Multiple videos can be labeled "official" or share the title of an unrelated
         // score. Abstain rather than choosing among similar-strength possibilities.
         if (ranked.Count > 1 && !ThemeCandidateDecisionEngine.IsClearWinner(ranked))
-            return ThemeFetchResult.NotFound(
-                "autonomous search found competing themes without a clear score margin; manual review not required for future retries");
+            return errors.Count > 0 || _sourceUnavailable.Count > 0
+                ? ThemeFetchResult.Transient("autonomous search incomplete with competing themes; retry next sweep")
+                : ThemeFetchResult.NotFound("autonomous search found competing themes without a clear score margin");
 
         if (ranked.Count > 0)
         {
@@ -199,7 +214,7 @@ internal sealed class AutonomousThemeDiscoveryProvider(
             ? queries[2]
             : queries[index];
 
-    private bool IsLikelyAnime(Series series)
+    internal bool IsLikelyAnime(Series series)
     {
         if (series.Genres.Any(g =>
             g.Equals("Anime", StringComparison.OrdinalIgnoreCase) ||

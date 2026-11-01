@@ -3,12 +3,30 @@
 Theme Music Finder scans Jellyfin TV series, first checks exact local stable-ID
 overrides for a hand-picked YouTube video, then looks up missing themes in
 ThemerrDB, library-aware strictly matched AnimeThemes openings (or a safe first
-ending when no opening is available), then Plex TV Themes, and finally cautious autonomous search across YouTube, SoundCloud, and (for anime) Bilibili when yt-dlp is installed. It converts
-and normalizes new downloads with Jellyfin's FFmpeg, then writes a validated
+ending when no opening is available), then Plex TV Themes. Optional autonomous
+discovery can follow these providers after explicit opt-in for new-source writes.
+It searches YouTube, SoundCloud, and anime-only Bilibili using installed `yt-dlp`.
+The plugin converts and normalizes new downloads with Jellyfin's FFmpeg, then writes a validated
 `theme.mp3` into the series folder.
 
-This build targets the Jellyfin 12.3 plugin ABI and .NET 10. It works without
-`yt-dlp`, cookies, an API key, or an extra container.
+This development build targets Jellyfin 12.4 / ABI 12.4.0.0 and .NET 10.
+
+| Track | Version | Jellyfin ABI |
+| --- | --- | --- |
+| Development audit preview (prerelease) | 1.2.2.2 | 12.4.0.0 |
+| Stable/catalog (separate artifact) | 1.2.1.9 | 12.1.0.0 |
+
+The preview is not a catalog promotion or a package for Jellyfin 12.1. The
+curated provider chain works without `yt-dlp`, cookies, an API key, or an extra
+container; autonomous discovery requires `yt-dlp`. Discovery is enabled in
+configuration (`EnableAutomaticDiscovery=true`), but **new-source automatic
+writing is disabled by default** (`EnableAutomaticDiscoveryWrites=false`).
+
+The 1.2.2.2 preview compiles against the official Jellyfin 12.4.0 packages.
+The 12.4 server release updates .NET dependencies without API implementation
+changes from 12.3 ([upstream comparison](https://github.com/jellyfin/jellyfin/compare/v12.3...v12.4)).
+Existing 12.3 audit-preview binaries are separate artifacts; use the package
+matching the server version when validating this source.
 
 ## What it does
 
@@ -18,20 +36,20 @@ This build targets the Jellyfin 12.3 plugin ABI and .NET 10. It works without
   virtual placeholder items.
 - Checks `ThemeMusicFinder.source-overrides.json` first for an exact `tvdb:ID` or
   `tmdb:ID` mapped to one hand-picked HTTPS YouTube video. TVDB takes precedence
-  when both IDs are present; the plugin never performs a generic YouTube search.
+  when both IDs are present. These curated overrides do not use title search.
 - Queries ThemerrDB next by the TMDB identifier already stored in Jellyfin.
 - After a confirmed miss or an unusable curated YouTube video, optionally queries
   AnimeThemes for series in an anime-named library or tagged Animation/Anime. If
   Jellyfin cannot yet identify the library, it still tries the provider rather than
   creating a false negative.
-- Accepts only an exact Jellyfin title, original title, catalogue synonym, or
+- AnimeThemes accepts only an exact Jellyfin title, original title, catalogue synonym, or
   stable-TVDB/TMDB-bound verified alias plus year match. It prefers a safe OP1 audio
   file and uses a safe ED1 only when no OP1 exists; fuzzy matches and generic
   web/YouTube search results are rejected.
 - Uses a lightweight 20-result AnimeThemes title/year search, including a
   punctuation-normalized query when needed, then requests full audio metadata only
   for a locally verified exact match.
-- Uses Plex by TVDB ID as the final fallback and rejects the known incorrect
+- Uses Plex by TVDB ID as the final ID-matched fallback and rejects the known incorrect
   `Barber of Seville` mapping for *A Knight of the Seven Kingdoms*.
 - Downloads a local override or ThemerrDB's curated YouTube source with the
   Trailer Reel `yt-dlp` installation when it is available, with YoutubeExplode
@@ -42,7 +60,18 @@ This build targets the Jellyfin 12.3 plugin ABI and .NET 10. It works without
 - Continues to later independent providers after a temporary provider failure;
   if every fallback misses, the temporary result remains retryable and is not
   added to the negative cache.
-- Automatically searches up to three YouTube queries, two SoundCloud queries, and (for animation/anime only) two Bilibili queries, each with up to five results, after existing catalogue providers miss. Search metadata is provisional: up to six shortlisted candidates receive full metadata rechecks before any download. Exact show-title inclusion, explicit conflicting years, original-title variants, duration, title/theme context, fan-made descriptions, misleading words, and competing similarly ranked videos are all checked. The plugin abstains if no candidate clearly wins. YouTube-only success is not required; SoundCloud and Bilibili use the same yt-dlp/FFmpeg pipeline. Searches are throttled and failures are retryable; optional providers have separate settings. This mode requires yt-dlp under Jellyfin's program-data/trailer-tools directory.
+- In the manual read-only audit, or after both discovery switches are enabled for
+  normal downloads, searches up to three YouTube queries, two SoundCloud queries,
+  and two Bilibili queries (animation/anime only), each with up to five results.
+  Up to six shortlisted candidates receive full metadata rechecks. The rules
+  check title/original title, conflicting years, duration, theme context,
+  fan-made descriptions, and competing scores; uncertain results abstain.
+  A matching year cannot outweigh another conflicting year or explicit medium
+  conflict. Failed inspection of a competitor keeps the result retryable and
+  prevents an apparent single winner from being downloaded.
+  Searches are throttled, provider failures remain retryable, and optional
+  sources have separate settings. Discovery requires `yt-dlp` under Jellyfin's
+  program-data `trailer-tools` directory.
 - Saves the result as `<series folder>/theme.mp3`.
 - Normalizes new downloads to -18 LUFS integrated loudness and -1.5 dBTP true
   peak by default. The target and normalization toggle are configurable.
@@ -89,31 +118,38 @@ never used.
 
 ## Requirements
 
-- Jellyfin Server 12.3.
+- Jellyfin Server 12.4.
 - The official Jellyfin 12 runtime (.NET 10).
 - Internet access from the Jellyfin container/server.
 - Write access from Jellyfin to the TV library folders.
 
 ## Install on your Unraid Jellyfin container
 
+These instructions describe the **1.2.2.2 prerelease for Jellyfin 12.4**.
+Choose the separate 1.2.1.9 stable/catalog artifact for Jellyfin 12.1.
+Back up plugin files and configuration; preserve existing configurations,
+aliases, overrides and history.
+
 1. Stop the Jellyfin container.
-2. Create this folder:
+2. Create this folder inside Jellyfin's configuration mount:
 
    ```text
-   /mnt/user/appdata/jellyfin/config/plugins/Theme Music Finder_1.2.1.9/
+   /config/plugins/Theme Music Finder_1.2.2.2/
    ```
 
-3. Extract `Jellyfin.Plugin.ThemeMusicFinder.dll`, `YoutubeExplode.dll`, and
-   `meta.json` from the release ZIP into that folder. The manifest whitelists
-   both DLLs because Jellyfin 12.1 treats `assemblies` as the complete load list,
-   including private runtime dependencies.
+3. Extract all five flat files from `ThemeMusicFinder_1.2.2.2.zip` into that folder:
+   `Jellyfin.Plugin.ThemeMusicFinder.dll`, `YoutubeExplode.dll`, `meta.json`,
+   `LICENSE`, and `THIRD_PARTY_NOTICES.md`. Root `meta.json` must declare both
+   runtime DLLs in Jellyfin's complete `assemblies` load list.
 4. Start Jellyfin.
 5. Open **Dashboard → Plugins → My Plugins → Theme Music Finder** and set the
    retry interval and loudness target. Local source overrides are always checked
    first; ThemerrDB, strict AnimeThemes fallback, immediate checking, and
    normalization are enabled by default.
-6. For the first sweep, open **Dashboard → Scheduled Tasks → Find missing theme
-   music** and select **Run**.
+6. Before considering new-source writes, run **Audit automatic theme discovery
+   (read only)** and review its metadata evidence. Keep
+   `EnableAutomaticDiscoveryWrites=false` until that review and explicit approval.
+   **Find missing theme music** runs the existing provider chain with these defaults.
 
 If another disk-heavy task such as trickplay generation also runs at 3:00 AM,
 move one task to a different time in Jellyfin's Scheduled Tasks page. This avoids
@@ -124,10 +160,10 @@ the server process and may be corrupted if overwritten in place.
 
 ## Verify
 
-On Rocinante, count or list downloaded themes with:
+To list themes, substitute your TV library roots in this read-only command:
 
 ```bash
-find /mnt/user/data/media/tv /mnt/user/data/media/anime-tv \
+find /path/to/tv-library /path/to/anime-library \
   -type f -iname 'theme.mp3' -print
 ```
 
@@ -184,16 +220,54 @@ remains intact.
 
 ## Build and test
 
-Install the .NET 10 SDK, then run:
+With the local handoff installed, run this single command from the repository root:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\.codex-handoff\tools\Build-Package.ps1 -Repository .
+```
+
+The helper reuses a compatible SDK or installs a private .NET 10 SDK in
+`.codex-handoff/dotnet/`, then restores, builds Release, runs the complete test
+project, publishes locally and validates the five-file flat ZIP. It writes
+`artifacts/codex-handoff/<run>/ThemeMusicFinder_1.2.2.2.zip` and `validation.json`.
+Never commit or redistribute the private SDK or historical/live diagnostics.
+
+Without the handoff, install the .NET 10 SDK and `zip`/`unzip`, then run this
+complete Bash check from the repository root:
 
 ```bash
+set -euo pipefail
 dotnet restore Jellyfin.Plugin.ThemeMusicFinder.slnx
 dotnet build Jellyfin.Plugin.ThemeMusicFinder.slnx -c Release --no-restore
 dotnet test tests/Jellyfin.Plugin.ThemeMusicFinder.Tests/Jellyfin.Plugin.ThemeMusicFinder.Tests.csproj -c Release
-./build.sh
+bash ./build.sh
 ```
 
-The installable ZIP is written to `dist/ThemeMusicFinder_1.2.1.9.zip`.
+The Bash build writes `dist/ThemeMusicFinder_1.2.2.2.zip`. Local package validation
+does not establish Jellyfin startup/restart, provider access, or theme correctness;
+isolated runtime checks are required before publishing a changed package.
+
+For an extracted official Windows portable Jellyfin 12.4 build, run this smoke
+check with the ZIP produced above (substitute the two local paths):
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\tools\Test-JellyfinRuntime.ps1 -PackagePath "C:\path\ThemeMusicFinder_1.2.2.2.zip" -JellyfinDirectory "C:\path\jellyfin"
+```
+
+It creates a new empty instance under ignored `artifacts/`, binds to a free
+loopback port, confirms health and plugin loading, then terminates only its own
+child process and starts it again using the same data. It records the results
+and package checksum without accessing a real media library. Windows portable
+checks do not replace official Linux-image startup/restart validation before
+publishing for a container deployment.
+
+Local validation of 1.2.2.2 passed restore, Release build, the complete test
+project, five-file package validation, and two healthy starts on the official
+Windows portable Jellyfin 12.4.0 runtime with both DLLs loaded. The NuGet audit
+reported no known vulnerable packages in the resolved plugin dependency graph.
+Docker/WSL were unavailable locally, so the updated Linux-image CI smoke job
+has not been run here. Live provider access and candidate audio correctness
+remain unverified.
 
 ## Source and license
 
@@ -204,7 +278,7 @@ ported to Jellyfin 12. The binary package also includes the MIT-licensed
 YoutubeExplode dependency. See `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 
 
-## Automatic discovery limitations (development branch)
+## Automatic discovery limitations (audit preview)
 
 The automatic decision engine is a **conservative metadata heuristic, not music fingerprinting**.
 A source title saying `official` cannot independently verify that its audio is the canonical
@@ -218,17 +292,33 @@ End-to-end validation on a controlled Jellyfin test library remains required bef
 ## Whole-library, read-only discovery audit (development)
 
 Run **Dashboard → Scheduled Tasks → Theme Music Finder → Audit automatic theme discovery (read only)**.
-This runs automatically through all physical TV series missing `theme.mp3` and writes
+Once started manually, this evaluates all physical TV series missing `theme.mp3` and writes
 `/config/plugins/configurations/ThemeMusicFinder.discovery-audit.json` (with Jellyfin's
 actual plugin configuration directory used on non-container systems).
 The JSON contains each evaluated series, TVDB/TMDB identifiers, title, year, candidate
 source and URL, score, rejection/ambiguity reason, and transient error classification.
 **It does not download music, touch existing themes, or alter attempts/backoff history.**
 The task is manual-on-demand rather than nightly by default to avoid doubling API requests.
+Schema 2 reports checkpoint after every ten new evaluations and on cancellation.
+An incomplete audit resumes compatible candidate/rejection decisions; transient,
+unavailable-candidate and not-applicable entries (including missing `yt-dlp`)
+are retried. A completed audit starts fresh. Changes to paths, titles,
+original titles, years, TVDB/TMDB IDs, anime-source eligibility, enabled sources,
+or the discovery-rule revision invalidate the checkpoint. Library enumeration
+order does not. Checkpoints from the earlier signature format are reevaluated
+once without changing attempts/backoff history. Developers must bump
+`AutonomousThemeDiscoveryProvider.AuditRulesRevision` when discovery queries,
+scoring, validation, or source applicability rules change.
 
 **New-source automatic writing is disabled by default** via
 `EnableAutomaticDiscoveryWrites=false` until audit results have been assessed. The
-existing exact-ID ThemerrDB, AnimeThemes, and Plex download chain remains operational.
+existing curated overrides, ThemerrDB, strict AnimeThemes, and Plex chain remains operational.
 After enabling automatic discovery writes, the nightly task and item-added listener
 use the same confidence-scored rules. The sources are metadata evidence only—not
 acoustic recognition. No guaranteed-correct audio assertion is made.
+
+Current server settings, overrides, attempt history, missing-theme inventory and
+live audit output have not been supplied with this checkout. The handoff's
+106-entry missing report and 60/64-entry override files are historical references,
+not current server configuration or coverage evidence. Isolated tests require no
+fresh server report; real candidate review needs a fresh audit and matching state.

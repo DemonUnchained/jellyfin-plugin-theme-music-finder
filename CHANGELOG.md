@@ -1,5 +1,58 @@
 # Changelog
 
+## Unreleased
+
+- Corrects README installation paths, ZIP names, ABI and prerelease status for
+  the current development preview, keeping stable/catalog 1.2.1.9 / 12.1 separate.
+  Documents the private-SDK handoff build and the default discovery write gate;
+  adds project, manifest, packaging and documentation consistency checks.
+- Invalidates incomplete read-only audit checkpoints after original-title,
+  TVDB/TMDB ID, anime-source eligibility or discovery-rule revision changes, in
+  addition to existing path/title/year/source switches. Uses deterministic,
+  unambiguous identity encoding; old signatures reevaluate once. No attempt
+  history is cleared, and new-source writes remain off by default.
+
+## 1.2.2.2 (prerelease / audit preview)
+
+- Compiles against Jellyfin.Controller and Jellyfin.Model 12.4.0 on .NET 10,
+  with targetAbi 12.4.0.0. Synchronizes package/install version and the CI
+  startup/restart image with 12.4; stable/catalog 1.2.1.9 remains separate.
+- Restores the missing automatic-discovery checkbox. Its JavaScript referenced
+  a nonexistent element, preventing the configuration page from loading or saving.
+  New-source writes remain disabled by default and require both discovery switches.
+- Rejects conflicting production-year tokens even when the correct year also
+  appears, and explicit film/game or animation/live-action medium conflicts.
+  Medium words in the series' own title do not count as conflicting evidence.
+- Keeps candidate inspection failures retryable and abstains from downloading
+  when an uninspected competitor could change the winner. An ambiguous result
+  during a source outage remains transient rather than entering miss backoff.
+- Retries unavailable-tool/not-applicable entries on incomplete audit resume,
+  observes cancellation before discovery, and saves an incomplete checkpoint
+  if cancellation interrupts final report persistence. Audit signatures include
+  anime eligibility even when Bilibili is disabled, plus revised matching rules.
+- Adds a repeatable isolated Windows portable startup/restart smoke script.
+  Restore, Release build, complete tests, package validation and official 12.4
+  Windows portable startup/restart passed locally; NuGet reported no known
+  vulnerable resolved plugin dependencies. Linux-image startup/restart and live
+  candidate correctness remain unverified. No deployment or release publication
+  is part of this update.
+
+## 1.2.2.1 (prerelease / audit preview)
+
+- Targets .NET 10 / Jellyfin 12.3 / targetAbi 12.3.0.0. Stable/catalog 1.2.1.9
+  remains a separate Jellyfin 12.1 artifact; this preview does not promote it.
+- Adds bounded YouTube, SoundCloud and anime-only Bilibili discovery after the
+  trusted provider chain, full-metadata rechecks and ambiguity abstention.
+  Scores are metadata heuristics, not music fingerprinting or proof of correctness.
+- Adds an on-demand, read-only whole-library discovery audit with schema 2
+  checkpoints, cancellation persistence and incomplete-scan resume. It downloads
+  no audio and preserves theme files and attempts/backoff history.
+- Keeps `EnableAutomaticDiscovery=true` and `EnableAutomaticDiscoveryWrites=false`
+  by default. Normal discovery downloads require both settings to be enabled.
+- Retains both runtime DLLs and their root `meta.json` declarations. The captured
+  release evidence records 12.3 startup/restart checks; current live-library
+  candidate accuracy and local modified-package runtime behavior remain unverified.
+
 ## 1.2.1.9
 
 - Restores `YoutubeExplode.dll` to the Jellyfin 12.1 `assemblies` whitelist.

@@ -1,8 +1,8 @@
 ---
 name: "Theme Music Finder"
 guid: "03459bac-6165-4b2d-b05f-40b953159b59"
-version: "1.2.2.1"
-targetAbi: "12.3.0.0"
+version: "1.2.2.2"
+targetAbi: "12.4.0.0"
 framework: "net10.0"
 overview: "Finds missing TV series theme music and saves it as theme.mp3."
 description: >
@@ -18,4 +18,4 @@ owner: "DemonUnchained"
 artifacts:
   - "Jellyfin.Plugin.ThemeMusicFinder.dll"
   - "YoutubeExplode.dll"
-changelog: "Adds Jellyfin 12.3 support, autonomous multi-source matching, a read-only full-library audit task, and explicit opt-in for automatic installation of newly discovered audio."
+changelog: "Targets Jellyfin 12.4 and .NET 10; hardens discovery matching and audit checkpoint recovery. New-source writes remain disabled by default."

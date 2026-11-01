@@ -106,7 +106,7 @@ internal static class ThemeCandidateDecisionEngine
     }
 
     internal static ScoredThemeVideo Evaluate(
-        string title, string? originalTitle, int? year, ThemeSearchVideo video)
+        string title, string? originalTitle, int? year, ThemeSearchVideo video, bool? isAnime = null)
     {
         var normalizedTitle = Normalize(video.Title);
         var titles = new[] { title, originalTitle }
@@ -126,8 +126,19 @@ internal static class ThemeCandidateDecisionEngine
         var years = Regex.Matches(normalizedTitle, @"\b(?:19|20)\d{2}\b")
             .Select(match => int.Parse(match.Value, CultureInfo.InvariantCulture))
             .ToHashSet();
-        if (year is > 1900 and < 2100 && years.Count > 0 && !years.Contains(year.Value))
+        if (year is > 1900 and < 2100 && years.Any(value => value != year.Value))
             return Reject(video, "candidate explicitly names a different production year");
+
+        var matchedTitle = titles.First(value => ContainsPhrase(normalizedTitle, value));
+        // Words in the series' own name (e.g. "The Movie Show") are not medium evidence.
+        var context = (" " + normalizedTitle + " ").Replace(
+            " " + matchedTitle + " ", " ", StringComparison.Ordinal);
+        if (new[] { "film", "movie", "video game" }.Any(value => ContainsPhrase(context, value)))
+            return Reject(video, "candidate explicitly names a different medium");
+        if (isAnime == false && new[] { "anime", "animation", "animated" }
+                .Any(value => ContainsPhrase(context, value))
+            || isAnime == true && ContainsPhrase(context, "live action"))
+            return Reject(video, "candidate animation/live-action medium conflicts with the series");
 
         // A multi-show comparison must not pass because it happens to contain one show name.
         foreach (var bad in RejectedPhrases)
@@ -144,7 +155,6 @@ internal static class ThemeCandidateDecisionEngine
         if (cue.Score == 0)
             return Reject(video, "no explicit opening/title/theme evidence");
 
-        var matchedTitle = titles.First(value => ContainsPhrase(normalizedTitle, value));
         var titleWords = matchedTitle.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
         var yearMatches = year is > 1900 and < 2100 && years.Contains(year.Value);
         var ambiguous = matchedTitle.Length <= 6 || titleWords == 1 || AmbiguousTitles.Contains(matchedTitle);

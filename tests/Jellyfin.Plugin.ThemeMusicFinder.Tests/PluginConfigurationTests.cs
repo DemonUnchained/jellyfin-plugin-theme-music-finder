@@ -52,4 +52,21 @@ public class PluginConfigurationTests
         var config = new PluginConfiguration { NormalizationTargetLufs = assigned };
         Assert.Equal(expected, config.NormalizationTargetLufs);
     }
+
+    [Fact]
+    public void EveryConfigPageSelectorHasAnElement()
+    {
+        var assembly = typeof(PluginConfiguration).Assembly;
+        using var stream = assembly.GetManifestResourceStream(
+            "Jellyfin.Plugin.ThemeMusicFinder.configPage.html")!;
+        using var reader = new StreamReader(stream);
+        var html = reader.ReadToEnd();
+        var ids = System.Text.RegularExpressions.Regex.Matches(html, "\\bid=\"([^\"]+)\"")
+            .Select(match => match.Groups[1].Value).ToHashSet(StringComparer.Ordinal);
+        var selectors = System.Text.RegularExpressions.Regex.Matches(
+            html, "querySelector\\('\\#([^']+)'\\)");
+        Assert.NotEmpty(selectors);
+        Assert.All(selectors.Cast<System.Text.RegularExpressions.Match>(), match =>
+            Assert.True(ids.Contains(match.Groups[1].Value), "Missing control: " + match.Groups[1].Value));
+    }
 }

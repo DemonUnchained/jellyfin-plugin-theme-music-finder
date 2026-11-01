@@ -160,8 +160,10 @@ public sealed class AutonomousThemePipelineTests
         finally { File.Delete(marker); }
     }
 
-    [Fact]
-    public async Task CompetingTitlesDoNotTriggerArbitraryDownload()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CompetingTitlesDoNotTriggerArbitraryDownload(bool sourceOutage)
     {
         var marker = Marker();
         try
@@ -170,16 +172,18 @@ public sealed class AutonomousThemePipelineTests
             var a = Candidate("abc123_XYZ9", "The Enfield Poltergeist (2023) TV main title theme");
             var b = Candidate("abc123_XYZ8", "The Enfield Poltergeist (2023) TV main title theme");
             var provider = new AutonomousThemeDiscoveryProvider(
-                null!, downloader, enableSoundCloud: false, enableBilibili: false,
+                null!, downloader, enableSoundCloud: sourceOutage, enableBilibili: false,
                 executablePathOverride: marker)
             {
                 DelayAsync = (_, _) => Task.CompletedTask,
-                SearchOverride = (_, _, _) => Task.FromResult<IReadOnlyList<ThemeSearchVideo>>([a, b]),
+                SearchOverride = (source, _, _) => source == "SoundCloud"
+                    ? throw new TimeoutException("source unavailable")
+                    : Task.FromResult<IReadOnlyList<ThemeSearchVideo>>([a, b]),
                 InspectOverride = (video, _) => Task.FromResult(video)
             };
 
             var result = await provider.FetchAsync(Show(), CancellationToken.None);
-            Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
+            Assert.Equal(sourceOutage ? ThemeFetchStatus.Transient : ThemeFetchStatus.NotFound, result.Status);
             Assert.Contains("competing", result.Reason);
             Assert.Empty(downloader.Requested);
         }
@@ -240,6 +244,59 @@ public sealed class AutonomousThemePipelineTests
             Assert.Contains("SoundCloud", result.Source);
             Assert.Single(downloader.Requested);
             Assert.Equal(track.Url, downloader.Requested[0]);
+        }
+        finally { File.Delete(marker); }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedInspectionCannotMakeAnAmbiguousShortlistLookLikeASingleWinner(bool audit)
+    {
+        var marker = Marker();
+        try
+        {
+            var downloader = new FakeThemeAudioDownloader(_ => Mp3());
+            var a = Candidate("abc123_XYZ9", "The Enfield Poltergeist (2023) TV main title theme");
+            var b = Candidate("abc123_XYZ8", "The Enfield Poltergeist (2023) TV main title theme");
+            var provider = new AutonomousThemeDiscoveryProvider(null!, downloader,
+                enableSoundCloud: false, enableBilibili: false, executablePathOverride: marker, auditOnly: audit)
+            {
+                DelayAsync = (_, _) => Task.CompletedTask,
+                SearchOverride = (_, _, _) => Task.FromResult<IReadOnlyList<ThemeSearchVideo>>([a, b]),
+                InspectOverride = (video, _) => video.Id == b.Id
+                    ? throw new TimeoutException("inspection unavailable")
+                    : Task.FromResult(video)
+            };
+            var result = await provider.FetchAsync(Show(), CancellationToken.None);
+            Assert.Equal(ThemeFetchStatus.Transient, result.Status);
+            Assert.Empty(downloader.Requested);
+        }
+        finally { File.Delete(marker); }
+    }
+
+    [Theory]
+    [InlineData(false, "When They Cry (2016) anime TV main title theme")]
+    [InlineData(true, "When They Cry (2016) live action TV main title theme")]
+    public async Task ConflictingAnimeMediumNeverDownloads(bool anime, string title)
+    {
+        var marker = Marker();
+        try
+        {
+            var downloader = new FakeThemeAudioDownloader(_ => Mp3());
+            var selected = Candidate("abc123_XYZ9", title);
+            var provider = new AutonomousThemeDiscoveryProvider(null!, downloader,
+                enableSoundCloud: false, enableBilibili: false, executablePathOverride: marker)
+            {
+                DelayAsync = (_, _) => Task.CompletedTask,
+                SearchOverride = (_, _, _) => Task.FromResult<IReadOnlyList<ThemeSearchVideo>>([selected]),
+                InspectOverride = (video, _) => Task.FromResult(video)
+            };
+            var show = new Series { Name = "When They Cry", ProductionYear = 2016,
+                Genres = anime ? ["Animation"] : ["Drama"] };
+            var result = await provider.FetchAsync(show, CancellationToken.None);
+            Assert.Equal(ThemeFetchStatus.NotFound, result.Status);
+            Assert.Empty(downloader.Requested);
         }
         finally { File.Delete(marker); }
     }

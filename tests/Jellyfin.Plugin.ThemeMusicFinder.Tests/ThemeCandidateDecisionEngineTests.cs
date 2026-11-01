@@ -81,6 +81,37 @@ public sealed class ThemeCandidateDecisionEngineTests
         Assert.False(result.Accepted);
     }
 
+    [Theory]
+    [InlineData("The Enfield Poltergeist (2023 / 2002) official TV main title theme")]
+    [InlineData("The Enfield Poltergeist 2023 TV main title theme from the 2002 film")]
+    public void MatchingYearCannotHideAnotherProductionYear(string title)
+    {
+        var result = ThemeCandidateDecisionEngine.Evaluate(
+            "The Enfield Poltergeist", null, 2023, Video(title));
+        Assert.False(result.Accepted);
+        Assert.Contains("production year", result.Reason);
+    }
+
+    [Theory]
+    [InlineData("film")]
+    [InlineData("movie")]
+    [InlineData("video game")]
+    public void RejectsExplicitOtherMediumEvenWithSeriesThemeCues(string medium)
+    {
+        var result = ThemeCandidateDecisionEngine.Evaluate(
+            "Example Series", null, 2023,
+            Video($"Example Series (2023) official TV main title theme - {medium} soundtrack"));
+        Assert.False(result.Accepted);
+    }
+
+    [Fact]
+    public void MediumWordsInTheActualSeriesNameAreNotConflicts()
+    {
+        Assert.True(ThemeCandidateDecisionEngine.Evaluate(
+            "The Movie Show", null, 2023,
+            Video("The Movie Show (2023) official TV main title theme")).Accepted);
+    }
+
     [Fact]
     public void UnclearWinnerIsRejected()
     {
